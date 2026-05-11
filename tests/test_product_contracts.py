@@ -79,3 +79,15 @@ def test_github_actions_use_current_node24_ready_actions():
     assert "uses: actions/checkout@v6" in workflow
     assert "uses: actions/setup-python@v6" in workflow
     assert 'package-ecosystem: "github-actions"' in dependabot
+
+
+def test_ci_runs_flutter_static_and_widget_gates():
+    """The mobile app is a public product surface and should be covered by CI."""
+    workflow = _read(".github/workflows/ci.yml")
+    dependabot = _read(".github/dependabot.yml")
+
+    assert "src/flutter/local_whisper" in workflow
+    assert "flutter analyze" in workflow
+    assert "flutter test" in workflow
+    assert 'package-ecosystem: "pub"' in dependabot
+    assert 'directory: "/src/flutter/local_whisper"' in dependabot

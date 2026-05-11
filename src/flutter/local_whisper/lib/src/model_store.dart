@@ -8,11 +8,23 @@ import 'history_store.dart';
 import 'models.dart';
 
 class ModelStore {
-  ModelStore(this._historyStore, {Directory? modelDirectory})
-    : _modelDirectoryOverride = modelDirectory;
+  ModelStore(
+    this._historyStore, {
+    Directory? modelDirectory,
+    Uri? huggingFaceBaseUri,
+    int maxDownloadAttempts = 3,
+    Duration downloadRetryDelay = const Duration(milliseconds: 350),
+  }) : _modelDirectoryOverride = modelDirectory,
+       _huggingFaceBaseUri =
+           huggingFaceBaseUri ?? Uri.parse('https://huggingface.co'),
+       _maxDownloadAttempts = maxDownloadAttempts < 1 ? 1 : maxDownloadAttempts,
+       _downloadRetryDelay = downloadRetryDelay;
 
   final HistoryStore _historyStore;
   final Directory? _modelDirectoryOverride;
+  final Uri _huggingFaceBaseUri;
+  final int _maxDownloadAttempts;
+  final Duration _downloadRetryDelay;
 
   static const catalog = [
     LocalModel(
@@ -299,6 +311,7 @@ class ModelStore {
         repoId,
         model.revision,
         snapshotPath: model.snapshotPath,
+        cancelToken: cancelToken,
       );
       cancelToken.throwIfCanceled();
       if (files.isEmpty) {
@@ -409,34 +422,45 @@ class ModelStore {
     String repoId,
     String revision, {
     String? snapshotPath,
+    required ModelDownloadCancelToken cancelToken,
   }) async {
-    final treePath = snapshotPath == null || snapshotPath.isEmpty
-        ? '/api/models/$repoId/tree/$revision'
-        : '/api/models/$repoId/tree/$revision/$snapshotPath';
-    final uri = Uri.https('huggingface.co', treePath, {'recursive': 'true'});
-    final request = await client.getUrl(uri);
-    final response = await request.close();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw LocalWhisperException(
-        'Model manifest failed with HTTP ${response.statusCode}.',
-      );
-    }
-    final body = await utf8.decoder.bind(response).join();
-    final decoded = jsonDecode(body);
-    if (decoded is! List) {
-      throw const LocalWhisperException('Model manifest response is invalid.');
-    }
-    return decoded
-        .whereType<Map<String, Object?>>()
-        .where((item) => item['type'] == 'file')
-        .map(
-          (item) => _SnapshotFile(
-            item['path'] as String? ?? '',
-            (item['size'] as num?)?.toInt() ?? 0,
-          ),
-        )
-        .where((file) => file.path.isNotEmpty)
-        .toList(growable: false);
+    return _withDownloadRetries('Model manifest', () async {
+      cancelToken.throwIfCanceled();
+      final treePath = snapshotPath == null || snapshotPath.isEmpty
+          ? '/api/models/$repoId/tree/$revision'
+          : '/api/models/$repoId/tree/$revision/$snapshotPath';
+      final uri = _huggingFaceUri(treePath, {'recursive': 'true'});
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      cancelToken.throwIfCanceled();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.drain<void>();
+        final message =
+            'Model manifest failed with HTTP ${response.statusCode}.';
+        if (_isRetryableStatus(response.statusCode)) {
+          throw _RetryableModelDownloadException(message);
+        }
+        throw LocalWhisperException(message);
+      }
+      final body = await utf8.decoder.bind(response).join();
+      final decoded = jsonDecode(body);
+      if (decoded is! List) {
+        throw const LocalWhisperException(
+          'Model manifest response is invalid.',
+        );
+      }
+      return decoded
+          .whereType<Map<String, Object?>>()
+          .where((item) => item['type'] == 'file')
+          .map(
+            (item) => _SnapshotFile(
+              item['path'] as String? ?? '',
+              (item['size'] as num?)?.toInt() ?? 0,
+            ),
+          )
+          .where((file) => file.path.isNotEmpty)
+          .toList(growable: false);
+    }, cancelToken: cancelToken);
   }
 
   Future<int> _downloadFile({
@@ -449,17 +473,50 @@ class ModelStore {
     required int declaredSize,
     required void Function(int bytes) onChunk,
   }) async {
+    return _withDownloadRetries(
+      'Model file "$path"',
+      () async {
+        return _downloadFileOnce(
+          client: client,
+          cancelToken: cancelToken,
+          repoId: repoId,
+          revision: revision,
+          path: path,
+          destination: destination,
+          declaredSize: declaredSize,
+          onChunk: onChunk,
+        );
+      },
+      cancelToken: cancelToken,
+      beforeRetry: () => _deleteIfExists(destination),
+    );
+  }
+
+  Future<int> _downloadFileOnce({
+    required HttpClient client,
+    required ModelDownloadCancelToken cancelToken,
+    required String repoId,
+    required String revision,
+    required String path,
+    required File destination,
+    required int declaredSize,
+    required void Function(int bytes) onChunk,
+  }) async {
     cancelToken.throwIfCanceled();
-    final uri = Uri.https('huggingface.co', '/$repoId/resolve/$revision/$path');
+    final uri = _huggingFaceUri('/$repoId/resolve/$revision/$path');
     final request = await client.getUrl(uri);
     final response = await request.close();
     cancelToken.throwIfCanceled();
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw LocalWhisperException(
-        'Model file "$path" failed with HTTP ${response.statusCode}.',
-      );
+      await response.drain<void>();
+      final message =
+          'Model file "$path" failed with HTTP ${response.statusCode}.';
+      if (_isRetryableStatus(response.statusCode)) {
+        throw _RetryableModelDownloadException(message);
+      }
+      throw LocalWhisperException(message);
     }
-    final sink = destination.openWrite();
+    final sink = destination.openWrite(mode: FileMode.write);
     var received = 0;
     try {
       await for (final chunk in response) {
@@ -480,6 +537,67 @@ class ModelStore {
       throw LocalWhisperException('Model file "$path" downloaded empty.');
     }
     return received;
+  }
+
+  Future<T> _withDownloadRetries<T>(
+    String label,
+    Future<T> Function() operation, {
+    ModelDownloadCancelToken? cancelToken,
+    Future<void> Function()? beforeRetry,
+  }) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= _maxDownloadAttempts; attempt += 1) {
+      try {
+        cancelToken?.throwIfCanceled();
+        return await operation();
+      } on _RetryableModelDownloadException catch (error) {
+        lastError = error;
+      } on SocketException catch (error) {
+        lastError = error;
+      } on HttpException catch (error) {
+        lastError = error;
+      } on HandshakeException catch (error) {
+        lastError = error;
+      } on TimeoutException catch (error) {
+        lastError = error;
+      }
+
+      cancelToken?.throwIfCanceled();
+      if (attempt >= _maxDownloadAttempts) break;
+      await beforeRetry?.call();
+      cancelToken?.throwIfCanceled();
+      if (_downloadRetryDelay > Duration.zero) {
+        await Future<void>.delayed(_downloadRetryDelay * attempt);
+      }
+    }
+    final reason = lastError?.toString() ?? 'unknown error';
+    throw LocalWhisperException(
+      '$label could not be downloaded after $_maxDownloadAttempts attempts: $reason',
+    );
+  }
+
+  Uri _huggingFaceUri(String path, [Map<String, String>? queryParameters]) {
+    final basePath = _huggingFaceBaseUri.path;
+    final normalizedBase = basePath == '/' || basePath.isEmpty
+        ? ''
+        : basePath.replaceFirst(RegExp(r'/+$'), '');
+    final normalizedPath = path.replaceFirst(RegExp(r'^/+'), '');
+    return _huggingFaceBaseUri.replace(
+      path: '$normalizedBase/$normalizedPath',
+      queryParameters: queryParameters,
+    );
+  }
+
+  static bool _isRetryableStatus(int statusCode) {
+    return statusCode == HttpStatus.requestTimeout ||
+        statusCode == HttpStatus.tooManyRequests ||
+        statusCode >= 500;
+  }
+
+  Future<void> _deleteIfExists(File file) async {
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 
   String _safeRelativePath(String path, {String? stripPrefix}) {
@@ -603,6 +721,15 @@ class _SnapshotFile {
 
   final String path;
   final int size;
+}
+
+class _RetryableModelDownloadException implements Exception {
+  const _RetryableModelDownloadException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class ModelDownloadCancelToken {

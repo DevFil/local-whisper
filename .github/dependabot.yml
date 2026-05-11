@@ -9,3 +9,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  - package-ecosystem: "pub"
+    directory: "/src/flutter/local_whisper"
+    schedule:
+      interval: "weekly"

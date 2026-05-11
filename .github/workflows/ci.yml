@@ -68,6 +68,31 @@ jobs:
         if: env.SKIP_SWIFT == 'true'
         run: echo "Skipped — Xcode 26 (Swift 6.2) not yet available on GitHub Actions runners"
 
+  flutter-checks:
+    name: Flutter mobile checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/flutter/local_whisper
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter app
+        run: flutter analyze
+
+      - name: Flutter widget tests
+        run: flutter test
+
   setup-check:
     name: setup.sh syntax check
     runs-on: macos-15

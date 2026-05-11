@@ -9,7 +9,7 @@ This checklist defines the publish-grade iOS Flutter app scope.
 - [x] Custom iOS app icon assets.
 - [x] iOS keyboard extension target.
 - [x] Keyboard settings in the main app.
-- [ ] First-run onboarding for permissions, offline models, keyboard setup, and privacy.
+- [x] First-run onboarding for permissions, offline models, keyboard setup, and privacy.
 - [ ] App Store screenshots and preview copy.
 - [x] Production display name and bundle identifiers.
 - [ ] Signing team, archive profile, and App Store Connect metadata.
@@ -24,7 +24,9 @@ This checklist defines the publish-grade iOS Flutter app scope.
 - [ ] Native Parakeet-TDT v3 Core ML adapter.
 - [ ] Native Kokoro-82M Core ML/TTS adapter.
 - [x] Model download cancellation and partial cleanup.
-- [ ] Model integrity checks, resumable downloads, and detailed storage accounting.
+- [x] Model integrity checks before treating packs as installed.
+- [x] Automatic retry for transient model download failures.
+- [ ] Resumable downloads and detailed storage accounting.
 - [ ] Import local model pack from Files.
 - [ ] Low-storage and failed-download recovery.
 
@@ -44,7 +46,7 @@ This checklist defines the publish-grade iOS Flutter app scope.
 - [x] Open main app from keyboard.
 - [ ] Shared settings read from App Group.
 - [ ] Insert latest transcript from shared history.
-- [ ] Keyboard onboarding and diagnostics.
+- [x] Keyboard onboarding and diagnostics.
 - [ ] Accessibility labels for every keyboard key.
 
 ## History, Storage, And Privacy
@@ -69,7 +71,7 @@ This checklist defines the publish-grade iOS Flutter app scope.
 - [x] Max-duration auto-stop.
 - [ ] Audio interruption and route-change recovery.
 - [x] Model download cancellation.
-- [ ] Model download retry affordance.
+- [x] Model download retry affordance.
 - [ ] Keyboard extension unavailable/disabled diagnostics.
 - [ ] Device-only test pass on a physical iPhone.
 

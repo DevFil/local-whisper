@@ -249,4 +249,95 @@ void main() {
       expect(whisperKit.installedBytes, greaterThan(await modelFile.length()));
     },
   );
+
+  test(
+    'snapshot downloads retry transient file failures and install verified packs',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'local-whisper-model-retry-',
+      );
+      final payload = utf8.encode('{"model":"test"}');
+      var fileRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        if (request.uri.path.contains('/tree/')) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode([
+              {
+                'type': 'file',
+                'path': 'openai_whisper-large-v3-v20240930_547MB/config.json',
+                'size': payload.length,
+              },
+            ]),
+          );
+        } else if (request.uri.path.contains('/resolve/')) {
+          fileRequests += 1;
+          if (fileRequests == 1) {
+            request.response.statusCode = HttpStatus.internalServerError;
+            request.response.write('temporary failure');
+          } else {
+            request.response.add(payload);
+          }
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+        SharedPreferences.resetStatic();
+      });
+
+      SharedPreferences.resetStatic();
+      SharedPreferences.setMockInitialValues({
+        'models.v1': jsonEncode([
+          for (final model in ModelStore.catalog) model.toJson(),
+        ]),
+      });
+
+      final store = ModelStore(
+        HistoryStore(),
+        modelDirectory: tempDir,
+        huggingFaceBaseUri: Uri(
+          scheme: 'http',
+          host: server.address.host,
+          port: server.port,
+        ),
+        downloadRetryDelay: Duration.zero,
+      );
+      final model = ModelStore.catalog.firstWhere(
+        (item) => item.id == 'whisperkit_large_v3_turbo',
+      );
+
+      final models = await store.downloadModel(
+        model,
+        onProgress: (_) {},
+        cancelToken: ModelDownloadCancelToken(),
+      );
+
+      expect(fileRequests, 2);
+      final whisperKit = models.firstWhere(
+        (item) => item.id == 'whisperkit_large_v3_turbo',
+      );
+      expect(whisperKit.state, ModelInstallState.installed);
+      expect(whisperKit.installedFiles, 1);
+      expect(whisperKit.installedBytes, payload.length);
+      expect(
+        await File('${whisperKit.localPath}/config.json').readAsString(),
+        '{"model":"test"}',
+      );
+
+      final loaded = await store.loadModels();
+      expect(
+        loaded
+            .firstWhere((item) => item.id == 'whisperkit_large_v3_turbo')
+            .state,
+        ModelInstallState.installed,
+      );
+    },
+  );
 }

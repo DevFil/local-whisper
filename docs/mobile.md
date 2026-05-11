@@ -56,7 +56,7 @@ Flutter owns Android transcription through `lib/src/sherpa_speech_service.dart`.
 
 ## Model Packs
 
-The model manager installs Local Whisper model families from Hugging Face snapshots and verifies installed files against a local manifest before treating a pack as installed.
+The model manager installs Local Whisper model families from Hugging Face snapshots, retries transient manifest and file-download failures, and verifies installed files against a local manifest before treating a pack as installed.
 
 WhisperKit Large v3 is wired for iOS transcription. Android uses sherpa-onnx model packs. Qwen3-ASR, Parakeet-TDT v3, WhisperKit, and Kokoro are local model families; they are not hosted APIs and they are not sent to a cloud speech service.
 
@@ -78,6 +78,8 @@ flutter run --dart-define=LOCAL_WHISPER_QA_SEED=true
 ```
 
 Android requests microphone permission, records local WAV audio, shows levels, stores local data, verifies the native input method, and transcribes with the installed sherpa-onnx model pack. Debug QA seeds interaction state so emulator passes can exercise the app and keyboard flow without downloading a large model each time.
+
+Large model downloads can fail because of flaky network or Hugging Face edge responses. The app retries transient manifest and file failures automatically; if the install still fails, tap Download again after the connection is stable.
 
 ## Checks
 

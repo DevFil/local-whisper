@@ -8,7 +8,7 @@
 
 Local Whisper is an offline speech-to-text app and local dictation service for macOS, iOS, and Android. You use it when you dictate into real apps: press a shortcut anywhere on macOS, speak, and get cleaned text copied or pasted without sending audio to a hosted API.
 
-On mobile, Local Whisper is both the recorder app and the native keyboard. Record in the app, keep local model packs and history on the device, then use the keyboard to bring modes, punctuation, and Local Whisper actions into other text fields.
+On mobile, Local Whisper is both the recorder app and the native keyboard. Record in the app, keep local model packs and history on the device, then use the keyboard to bring modes, punctuation, and Local Whisper actions into other text fields. Large model-pack installs retry transient download failures and verify files before a pack is marked ready.
 
 iOS transcribes locally with WhisperKit/Core ML. Android records local WAV audio and transcribes on-device through `sherpa_onnx`; Parakeet-TDT v3 INT8 ONNX is the default Android pack, and Qwen3-ASR 0.6B INT8 ONNX is the broader multilingual pack. There is no cloud speech fallback.
 

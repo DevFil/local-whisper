@@ -7,7 +7,7 @@ body:
     attributes:
       label: Summary
       description: One line describing the capability you want.
-      placeholder: "Add an Android-native offline ASR adapter for downloaded model packs."
+      placeholder: "Add resumable downloads for interrupted mobile model installs."
     validations:
       required: true
 
