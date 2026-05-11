@@ -85,7 +85,7 @@ The setup script installs dependencies, downloads and warms the active transcrip
 - **Keyboard shortcuts** for proofreading, rewriting, and prompt engineering on selected text.
 - **CLI**: `wh whisper`, `wh listen`, `wh transcribe` for scripting and automation.
 - **Native macOS UI**: menu bar status/control, floating overlay, and settings window.
-- **Mobile app and keyboards**: iOS and Android include the Flutter app plus native keyboard surfaces. Mobile manages model packs, history, modes, settings, clipboard output, and setup replay.
+- **Mobile app and keyboards**: iOS and Android include the Flutter app plus native keyboard surfaces. Mobile manages model packs, local history export/delete controls, modes, settings, clipboard output, and setup replay.
 - **Mobile local models**: iOS uses WhisperKit/Core ML today. Android uses sherpa-onnx with Parakeet-TDT v3 INT8 ONNX first and Qwen3-ASR 0.6B INT8 ONNX for broader multilingual coverage. These are local model packs, not hosted APIs.
 - **No cloud speech fallback**: no hosted speech API, no account, no telemetry, no transcript upload.
 - **Automatic backup** for every recording and transcription.

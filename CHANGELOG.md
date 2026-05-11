@@ -6,12 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added mobile history ownership controls: export local transcript history as Markdown to the clipboard, delete individual transcripts, clear all history with confirmation, and see saved entry, audio-duration, and storage estimates in the History tab.
+
 ### Changed
 
 - Aligned public docs, setup/onboarding copy, issue templates, and mobile guides with the project voice: local-first, concrete about runtime boundaries, and specific about the macOS, iOS, and Android surfaces.
 
 ### Fixed
 
+- Brought the Android keyboard closer to the iOS keyboard surface: the app's Keyboard quick insert toggle now controls Android mode and punctuation shortcuts, and the Android keyboard includes Clean, Message, Notes, Prompt, punctuation, Space, New line, and Delete actions.
 - Made mobile model-pack installs more resilient: Hugging Face snapshot manifests and model files now retry transient network, 408, 429, and 5xx failures before surfacing an install error, and downloaded files are still verified against the local manifest before a pack is marked ready.
 - Added Flutter mobile analyze and widget-test coverage to CI, plus Dependabot coverage for the Flutter `pubspec.yaml`, so the iOS/Android surface is protected alongside Python and Swift.
 - Made the service lifecycle setting real end-to-end: `[service].idle_unload_minutes` now loads from `config.toml`, appears in `wh config` and macOS Advanced settings, and macOS changes reschedule the running service without restart. The macOS app also now receives and exposes the English engine's `max_tokens`, and `wh config show` uses the current engine and speech defaults.

@@ -58,15 +58,33 @@ class LocalWhisperInputMethodService : InputMethodService() {
                     markKeyboardSeen()
                     commit(verificationToken)
                 },
-                key(",") { commit(", ") },
-                key(".") { commit(". ") },
-                key("?") { commit("? ") },
             ),
         )
+        if (quickInsertEnabled()) {
+            root.addView(
+                row(
+                    key("Clean") { commit("[Clean] ") },
+                    key("Message") { commit("[Message] ") },
+                    key("Notes") { commit("[Notes]\n") },
+                    key("Prompt") { commit("[Prompt] ") },
+                ),
+            )
+            root.addView(
+                row(
+                    key(",") { commit(", ") },
+                    key(".") { commit(". ") },
+                    key("?") { commit("? ") },
+                    key("!") { commit("! ") },
+                ),
+            )
+        }
         root.addView(
             row(
                 key("Space") { commit(" ") },
                 key("New line") { commit("\n") },
+                key("Delete") {
+                    currentInputConnection?.deleteSurroundingText(1, 0)
+                },
             ),
         )
         return root
@@ -128,5 +146,10 @@ class LocalWhisperInputMethodService : InputMethodService() {
             } catch (_: SecurityException) {
             }
         }
+    }
+
+    private fun quickInsertEnabled(): Boolean {
+        val prefs = getSharedPreferences("local_whisper_setup", Context.MODE_PRIVATE)
+        return prefs.getBoolean("quickInsert", true)
     }
 }

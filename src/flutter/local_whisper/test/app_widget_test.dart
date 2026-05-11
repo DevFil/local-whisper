@@ -105,12 +105,20 @@ void main() {
             },
           ),
         );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') return null;
+          if (call.method == 'Clipboard.getData') return {'text': ''};
+          return null;
+        });
   });
 
   tearDown(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       ..setMockMethodCallHandler(_speechChannel, null)
       ..setMockMethodCallHandler(_setupChannel, null)
+      ..setMockMethodCallHandler(SystemChannels.platform, null)
       ..setMockStreamHandler(_levelsChannel, null);
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
@@ -398,12 +406,139 @@ void main() {
     expect(find.text('WhisperKit Large v3'), findsWidgets);
     expect(startPayload, isNull);
   });
+
+  testWidgets('history can be exported and cleared from the device', (
+    tester,
+  ) async {
+    final entries = [
+      TranscriptEntry(
+        id: 'entry-one',
+        createdAt: DateTime.utc(2026, 5, 12, 8, 30),
+        rawText: 'first raw',
+        finalText: 'First final.',
+        modeName: 'Clean Dictation',
+        localeId: 'en-US',
+        duration: 1.4,
+      ),
+      TranscriptEntry(
+        id: 'entry-two',
+        createdAt: DateTime.utc(2026, 5, 12, 8, 35),
+        rawText: 'second raw',
+        finalText: 'Second final.',
+        modeName: 'Notes',
+        localeId: 'en-US',
+        duration: 2.1,
+      ),
+    ];
+
+    await _pumpApp(
+      tester,
+      installedModelPath: installedModelPath,
+      onboardingComplete: true,
+      history: entries,
+    );
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 entries'), findsOneWidget);
+    expect(find.text('First final.'), findsOneWidget);
+    expect(find.text('Second final.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Export history'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('History exported to clipboard'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear history'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear history?'), findsOneWidget);
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No recordings yet'), findsOneWidget);
+    expect(find.text('First final.'), findsNothing);
+    expect(find.text('Second final.'), findsNothing);
+  });
+
+  testWidgets('single history entries can be deleted without clearing all', (
+    tester,
+  ) async {
+    final entries = [
+      TranscriptEntry(
+        id: 'entry-one',
+        createdAt: DateTime.utc(2026, 5, 12, 8, 30),
+        rawText: 'first raw',
+        finalText: 'First final.',
+        modeName: 'Clean Dictation',
+        localeId: 'en-US',
+        duration: 1.4,
+      ),
+      TranscriptEntry(
+        id: 'entry-two',
+        createdAt: DateTime.utc(2026, 5, 12, 8, 35),
+        rawText: 'second raw',
+        finalText: 'Second final.',
+        modeName: 'Notes',
+        localeId: 'en-US',
+        duration: 2.1,
+      ),
+    ];
+
+    await _pumpApp(
+      tester,
+      installedModelPath: installedModelPath,
+      onboardingComplete: true,
+      history: entries,
+    );
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Delete transcript').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete transcript?'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('First final.'), findsNothing);
+    expect(find.text('Second final.'), findsOneWidget);
+    expect(find.text('1 entry'), findsOneWidget);
+  });
+
+  testWidgets('history search distinguishes no matches from no recordings', (
+    tester,
+  ) async {
+    await _pumpApp(
+      tester,
+      installedModelPath: installedModelPath,
+      onboardingComplete: true,
+      history: [
+        TranscriptEntry(
+          id: 'entry-one',
+          createdAt: DateTime.utc(2026, 5, 12, 8, 30),
+          rawText: 'local raw',
+          finalText: 'Local final.',
+          modeName: 'Clean Dictation',
+          localeId: 'en-US',
+          duration: 1.4,
+        ),
+      ],
+    );
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'absent');
+    await tester.pumpAndSettle();
+
+    expect(find.text('No matching recordings'), findsOneWidget);
+    expect(find.text('No recordings yet'), findsNothing);
+  });
 }
 
 Future<void> _pumpApp(
   WidgetTester tester, {
   required String? installedModelPath,
   List<DictationMode>? modes,
+  List<TranscriptEntry>? history,
   bool onboardingComplete = false,
   bool resetPreferences = true,
 }) async {
@@ -413,6 +548,10 @@ Future<void> _pumpApp(
       if (onboardingComplete) 'onboarding.v1': true,
       if (modes != null)
         'modes.v1': jsonEncode(modes.map((mode) => mode.toJson()).toList()),
+      if (history != null)
+        'history.v1': jsonEncode(
+          history.map((entry) => entry.toJson()).toList(),
+        ),
       if (installedModelPath != null)
         'models.v1': jsonEncode([
           for (final model in ModelStore.catalog)

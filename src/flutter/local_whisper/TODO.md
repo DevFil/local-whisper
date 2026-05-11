@@ -44,7 +44,7 @@ This checklist tracks the mobile work needed for a publish-grade Local Whisper a
 - [x] Native iOS keyboard extension target.
 - [x] Quick mode markers and punctuation keys.
 - [x] Open main app from keyboard.
-- [ ] Shared settings read from App Group.
+- [x] Shared settings read by the iOS keyboard from App Group and by the Android keyboard from setup preferences.
 - [ ] Insert latest transcript from shared history.
 - [x] Keyboard onboarding and diagnostics.
 - [ ] Accessibility labels for every keyboard key.
@@ -54,8 +54,8 @@ This checklist tracks the mobile work needed for a publish-grade Local Whisper a
 - [x] Searchable local transcript history.
 - [x] Local persistence decode fallback.
 - [x] Privacy manifest.
-- [ ] Export and delete-all history controls.
-- [ ] Storage usage breakdown for history and models.
+- [x] Export, per-entry delete, and delete-all history controls.
+- [x] Storage usage breakdown for history and models.
 - [ ] App lock / privacy screen option.
 - [ ] Clear privacy copy for App Store submission.
 

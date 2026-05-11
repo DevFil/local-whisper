@@ -35,6 +35,54 @@ class HistoryStore {
     );
   }
 
+  Future<void> deleteHistoryEntry(String id) async {
+    final entries = await loadHistory();
+    await saveHistory(
+      entries.where((entry) => entry.id != id).toList(growable: false),
+    );
+  }
+
+  Future<void> clearHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_historyKey);
+  }
+
+  static String exportMarkdown(List<TranscriptEntry> entries) {
+    final buffer = StringBuffer()
+      ..writeln('# Local Whisper History')
+      ..writeln();
+    if (entries.isEmpty) {
+      buffer.writeln('No local transcriptions exported.');
+      return buffer.toString().trimRight();
+    }
+
+    for (final entry in entries) {
+      buffer
+        ..writeln('## ${_exportDate(entry.createdAt)}')
+        ..writeln()
+        ..writeln('- Mode: ${entry.modeName}')
+        ..writeln('- Locale: ${entry.localeId}')
+        ..writeln('- Duration: ${entry.duration.toStringAsFixed(1)}s')
+        ..writeln()
+        ..writeln('### Final')
+        ..writeln()
+        ..writeln(entry.finalText.trim())
+        ..writeln()
+        ..writeln('### Raw')
+        ..writeln()
+        ..writeln(entry.rawText.trim())
+        ..writeln();
+    }
+    return buffer.toString().trimRight();
+  }
+
+  static String _exportDate(DateTime value) {
+    final utc = value.toUtc();
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+        '${two(utc.hour)}:${two(utc.minute)} UTC';
+  }
+
   Future<AppSettings> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_settingsKey);

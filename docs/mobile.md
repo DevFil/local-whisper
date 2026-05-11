@@ -49,10 +49,18 @@ Native iOS uses:
 Native Android uses:
 
 - `android/app/src/main/kotlin/info/gabrimatic/localwhisper/MainActivity.kt`: microphone status, 16 kHz mono WAV recording, levels, app settings, input-method settings, keyboard status, keyboard verification, and keyboard preference sync.
-- `android/app/src/main/kotlin/info/gabrimatic/localwhisper/LocalWhisperInputMethodService.kt`: Verify, punctuation, space, new-line, settings, and haptics.
+- `android/app/src/main/kotlin/info/gabrimatic/localwhisper/LocalWhisperInputMethodService.kt`: Verify, mode markers, punctuation, space, new-line, delete, settings, haptics, and quick-insert visibility.
 - `android/app/src/main/AndroidManifest.xml`: microphone, haptics, app identity, launcher identity, and input-method service.
 
 Flutter owns Android transcription through `lib/src/sherpa_speech_service.dart`. The service runs sherpa-onnx in a background isolate, loads the installed model folder, reads the recorded WAV file, and returns the transcript through the same `NativeSpeechService` result shape used by iOS.
+
+## History And Keyboard Control
+
+History stays on the device. The History tab shows how many entries are saved, total recorded duration, and an approximate saved-history size. You can export the full history as Markdown to the clipboard, delete one transcript, or clear all history after confirmation.
+
+The Models tab shows installed pack count and model storage. Installed packs can be removed from the device when you no longer need them.
+
+The iOS keyboard reads haptics and quick-insert settings from the shared app group. The Android keyboard reads the same settings from setup preferences: turning off quick insert keeps Verify, Space, New line, and Delete available, while hiding mode and punctuation shortcuts.
 
 ## Model Packs
 

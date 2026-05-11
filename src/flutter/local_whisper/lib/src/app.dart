@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -493,6 +494,73 @@ class _AppControllerState extends State<AppController>
     _toast('Re-polished and copied');
   }
 
+  Future<void> _exportHistory() async {
+    if (_history.isEmpty) return;
+    await Clipboard.setData(
+      ClipboardData(text: HistoryStore.exportMarkdown(_history)),
+    );
+    _toast('History exported to clipboard');
+  }
+
+  Future<void> _confirmAndClearHistory() async {
+    if (_history.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear history?'),
+        content: const Text(
+          'Remove all local transcript entries from this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _historyStore.clearHistory();
+    if (!mounted) return;
+    setState(() => _history = const []);
+    _toast('History cleared');
+  }
+
+  Future<void> _confirmAndDeleteHistoryEntry(TranscriptEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete transcript?'),
+        content: Text(
+          'Remove the ${entry.modeName} transcript from this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _historyStore.deleteHistoryEntry(entry.id);
+    if (!mounted) return;
+    setState(() {
+      _history = _history
+          .where((candidate) => candidate.id != entry.id)
+          .toList(growable: false);
+    });
+    _toast('Transcript deleted');
+  }
+
   Future<void> _saveSettings(AppSettings settings) async {
     await _historyStore.saveSettings(settings);
     await _syncKeyboardSettings(settings);
@@ -741,12 +809,16 @@ class _AppControllerState extends State<AppController>
       HistoryPage(
         searchController: _searchController,
         entries: _filteredHistory,
+        allEntries: _history,
         onChangedSearch: () => setState(() {}),
         onCopy: (text) async {
           await Clipboard.setData(ClipboardData(text: text));
           _toast('Copied');
         },
         onRetry: _retryPolish,
+        onExport: _exportHistory,
+        onClearAll: _confirmAndClearHistory,
+        onDelete: _confirmAndDeleteHistoryEntry,
       ),
       ModesPage(
         modes: _modes,
@@ -2098,20 +2170,34 @@ class HistoryPage extends StatelessWidget {
   const HistoryPage({
     required this.searchController,
     required this.entries,
+    required this.allEntries,
     required this.onChangedSearch,
     required this.onCopy,
     required this.onRetry,
+    required this.onExport,
+    required this.onClearAll,
+    required this.onDelete,
     super.key,
   });
 
   final TextEditingController searchController;
   final List<TranscriptEntry> entries;
+  final List<TranscriptEntry> allEntries;
   final VoidCallback onChangedSearch;
   final ValueChanged<String> onCopy;
   final ValueChanged<TranscriptEntry> onRetry;
+  final VoidCallback onExport;
+  final VoidCallback onClearAll;
+  final ValueChanged<TranscriptEntry> onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final totalDuration = allEntries.fold<double>(
+      0,
+      (total, entry) => total + entry.duration,
+    );
+    final historyBytes = _historyByteEstimate(allEntries);
+
     return ListView(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -2121,8 +2207,35 @@ class HistoryPage extends StatelessWidget {
       ),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
-        Text('History', style: Theme.of(context).textTheme.displaySmall),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'History',
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Export history',
+              onPressed: allEntries.isEmpty ? null : onExport,
+              icon: const Icon(Icons.ios_share_rounded),
+            ),
+            IconButton(
+              tooltip: 'Clear history',
+              onPressed: allEntries.isEmpty ? null : onClearAll,
+              icon: const Icon(Icons.delete_sweep_rounded),
+            ),
+          ],
+        ),
         const SizedBox(height: 14),
+        if (allEntries.isNotEmpty) ...[
+          _HistorySummary(
+            entryCount: allEntries.length,
+            totalDuration: totalDuration,
+            storageBytes: historyBytes,
+          ),
+          const SizedBox(height: 14),
+        ],
         TextField(
           controller: searchController,
           onChanged: (_) => onChangedSearch(),
@@ -2133,15 +2246,26 @@ class HistoryPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         if (entries.isEmpty)
-          const _MessagePanel(
-            icon: Icons.history_rounded,
-            title: 'No recordings yet',
-            body: 'Finished dictations appear here and stay on this device.',
+          _MessagePanel(
+            icon: allEntries.isEmpty
+                ? Icons.history_rounded
+                : Icons.search_off_rounded,
+            title: allEntries.isEmpty
+                ? 'No recordings yet'
+                : 'No matching recordings',
+            body: allEntries.isEmpty
+                ? 'Finished dictations appear here and stay on this device.'
+                : 'Try a different transcript, mode, or raw text search.',
             color: AppPalette.sky,
           )
         else
           for (final entry in entries) ...[
-            _HistoryCard(entry: entry, onCopy: onCopy, onRetry: onRetry),
+            _HistoryCard(
+              entry: entry,
+              onCopy: onCopy,
+              onRetry: onRetry,
+              onDelete: onDelete,
+            ),
             const SizedBox(height: 12),
           ],
       ],
@@ -2154,11 +2278,13 @@ class _HistoryCard extends StatelessWidget {
     required this.entry,
     required this.onCopy,
     required this.onRetry,
+    required this.onDelete,
   });
 
   final TranscriptEntry entry;
   final ValueChanged<String> onCopy;
   final ValueChanged<TranscriptEntry> onRetry;
+  final ValueChanged<TranscriptEntry> onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -2185,6 +2311,11 @@ class _HistoryCard extends StatelessWidget {
               Text('${entry.duration.toStringAsFixed(1)}s'),
               const Spacer(),
               IconButton(
+                tooltip: 'Delete transcript',
+                onPressed: () => onDelete(entry),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+              IconButton(
                 tooltip: 'Re-polish',
                 onPressed: () => onRetry(entry),
                 icon: const Icon(Icons.auto_fix_high_rounded),
@@ -2195,6 +2326,46 @@ class _HistoryCard extends StatelessWidget {
                 icon: const Icon(Icons.copy_rounded),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistorySummary extends StatelessWidget {
+  const _HistorySummary({
+    required this.entryCount,
+    required this.totalDuration,
+    required this.storageBytes,
+  });
+
+  final int entryCount;
+  final double totalDuration;
+  final int storageBytes;
+
+  @override
+  Widget build(BuildContext context) {
+    final entryLabel = entryCount == 1 ? '1 entry' : '$entryCount entries';
+    return _Panel(
+      child: Row(
+        children: [
+          _SummaryMetric(
+            icon: Icons.receipt_long_rounded,
+            label: 'Saved',
+            value: entryLabel,
+          ),
+          const SizedBox(width: 12),
+          _SummaryMetric(
+            icon: Icons.timer_rounded,
+            label: 'Audio',
+            value: _formatDurationSeconds(totalDuration.round()),
+          ),
+          const SizedBox(width: 12),
+          _SummaryMetric(
+            icon: Icons.sd_storage_rounded,
+            label: 'History',
+            value: storageBytes == 0 ? '0 B' : _formatBytes(storageBytes),
           ),
         ],
       ),
@@ -2565,9 +2736,19 @@ class _SummaryMetric extends StatelessWidget {
             children: [
               Icon(icon, color: AppPalette.accent, size: 20),
               const SizedBox(height: 8),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 2),
-              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
           ),
         ),
@@ -3160,6 +3341,13 @@ String _platformInstallNote(LocalModel model) {
     return model.installNote;
   }
   return 'Model pack for another Local Whisper runtime. Android transcription uses Sherpa ONNX packs.';
+}
+
+int _historyByteEstimate(List<TranscriptEntry> entries) {
+  if (entries.isEmpty) return 0;
+  return utf8
+      .encode(jsonEncode(entries.map((entry) => entry.toJson()).toList()))
+      .length;
 }
 
 class _InlineNotice extends StatelessWidget {

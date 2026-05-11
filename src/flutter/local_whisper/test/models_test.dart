@@ -7,6 +7,30 @@ import 'package:local_whisper_flutter/src/models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('history export renders portable markdown without network services', () {
+    final entry = TranscriptEntry(
+      id: 'entry-1',
+      createdAt: DateTime.utc(2026, 5, 12, 8, 30),
+      rawText: 'um hello comma local whisper period',
+      finalText: 'Hello, local whisper.',
+      modeName: 'Clean Dictation',
+      localeId: 'en-US',
+      duration: 2.4,
+    );
+
+    final markdown = HistoryStore.exportMarkdown([entry]);
+
+    expect(markdown, startsWith('# Local Whisper History'));
+    expect(markdown, contains('## 2026-05-12 08:30 UTC'));
+    expect(markdown, contains('- Mode: Clean Dictation'));
+    expect(markdown, contains('- Locale: en-US'));
+    expect(markdown, contains('- Duration: 2.4s'));
+    expect(markdown, contains('### Final'));
+    expect(markdown, contains('Hello, local whisper.'));
+    expect(markdown, contains('### Raw'));
+    expect(markdown, contains('um hello comma local whisper period'));
+  });
+
   test('settings round-trip preserves offline dictation controls', () {
     const settings = AppSettings(
       localeId: 'de-DE',

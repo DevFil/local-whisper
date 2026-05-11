@@ -91,3 +91,15 @@ def test_ci_runs_flutter_static_and_widget_gates():
     assert "flutter test" in workflow
     assert 'package-ecosystem: "pub"' in dependabot
     assert 'directory: "/src/flutter/local_whisper"' in dependabot
+
+
+def test_android_keyboard_honors_quick_insert_setting():
+    """The Android input method should match the app's keyboard quick-insert toggle."""
+    keyboard = _read(
+        "src/flutter/local_whisper/android/app/src/main/kotlin/info/gabrimatic/localwhisper/LocalWhisperInputMethodService.kt"
+    )
+
+    assert "quickInsertEnabled()" in keyboard
+    assert "if (quickInsertEnabled())" in keyboard
+    assert '"[Clean] "' in keyboard
+    assert '"[Prompt] "' in keyboard
