@@ -19,13 +19,20 @@ class Recorder:
 
     def __init__(self):
         self._recording = threading.Event()
+        self._input_ready = threading.Event()
         self._chunks = []
         self._chunks_lock = threading.Lock()
+        self._input_health_lock = threading.Lock()
         self._stream = None
         self._state_lock = threading.Lock()
         self._monitor_lock = threading.Lock()
         self._start_time = None
         self._current_rms: float = 0.0
+        self._input_has_signal = False
+        self._input_frames_seen = 0
+        self._input_warmup_timeout = 0.45
+        self._input_live_threshold = 1e-9
+        self._start_retries = 2
 
         config = get_config()
         buf_size = int(config.audio.sample_rate * config.audio.pre_buffer) if config.audio.pre_buffer > 0 else 0
@@ -136,35 +143,58 @@ class Recorder:
         with self._state_lock:
             if self._recording.is_set():
                 return False
-            try:
-                self.stop_monitoring()
-                with self._chunks_lock:
-                    if config.audio.pre_buffer > 0 and len(self._pre_buffer) > 0:
-                        # Reassemble the ring buffer in one allocation instead of
-                        # np.roll + .copy (which allocates twice).
-                        buf_size = len(self._pre_buffer)
-                        pos = self._pre_buffer_pos
-                        pre = np.empty(buf_size, dtype=np.float32)
-                        pre[:buf_size - pos] = self._pre_buffer[pos:]
-                        pre[buf_size - pos:] = self._pre_buffer[:pos]
-                        self._chunks = [pre]
-                    else:
-                        self._chunks = []
-                self._start_time = time.time()
-                self._stream = sd.InputStream(
-                    samplerate=config.audio.sample_rate,
-                    channels=1,
-                    dtype=np.float32,
-                    callback=self._callback,
-                    blocksize=1024
-                )
-                self._stream.start()
+            self.stop_monitoring()
+            with self._chunks_lock:
+                if config.audio.pre_buffer > 0 and len(self._pre_buffer) > 0:
+                    # Reassemble the ring buffer in one allocation instead of
+                    # np.roll + .copy (which allocates twice).
+                    buf_size = len(self._pre_buffer)
+                    pos = self._pre_buffer_pos
+                    pre = np.empty(buf_size, dtype=np.float32)
+                    pre[:buf_size - pos] = self._pre_buffer[pos:]
+                    pre[buf_size - pos:] = self._pre_buffer[:pos]
+                    self._chunks = [pre]
+                else:
+                    self._chunks = []
+
+            last_error: Exception | None = None
+            for attempt in range(1, self._start_retries + 1):
+                self._reset_input_health()
                 self._recording.set()
-                return True
-            except Exception as e:
-                log(f"Mic error: {e}", "ERR")
+                try:
+                    self._stream = sd.InputStream(
+                        samplerate=config.audio.sample_rate,
+                        channels=1,
+                        dtype=np.float32,
+                        callback=self._callback,
+                        blocksize=1024
+                    )
+                    self._stream.start()
+
+                    if self._wait_for_live_input():
+                        self._start_time = time.time()
+                        return True
+
+                    last_error = RuntimeError("microphone returned all-zero audio")
+                    log("Mic returned silence during warm-up; resetting audio input", "WARN")
+                except Exception as e:
+                    last_error = e
+                    if attempt < self._start_retries:
+                        log(f"Mic start failed; resetting audio input ({e})", "WARN")
+
                 self._recording.clear()
-                return False
+                self._silent_close_stream()
+                with self._chunks_lock:
+                    self._chunks = []
+                if attempt < self._start_retries:
+                    self.reset_audio_host(close_stream=False)
+                    time.sleep(0.15)
+
+            if last_error is None:
+                last_error = RuntimeError("microphone did not become ready")
+            log(f"Mic error: {last_error}", "ERR")
+            self._recording.clear()
+            return False
 
     def stop(self) -> np.ndarray:
         """Stop recording and return audio data."""
@@ -172,13 +202,7 @@ class Recorder:
             if not self._recording.is_set():
                 return np.array([], dtype=np.float32)
             self._recording.clear()
-            if self._stream:
-                try:
-                    self._stream.stop()
-                    self._stream.close()
-                except Exception as e:
-                    log(f"Stream cleanup warning: {e}", "WARN")
-                self._stream = None
+            self._silent_close_stream()
             with self._chunks_lock:
                 if self._chunks:
                     audio = np.concatenate(self._chunks)
@@ -187,10 +211,56 @@ class Recorder:
                 self._chunks = []
                 return np.array([], dtype=np.float32)
 
+    def reset_audio_host(self, close_stream: bool = True):
+        """Reset PortAudio after macOS leaves an input device in a stale state."""
+        if close_stream:
+            self._silent_close_stream()
+        try:
+            terminate = getattr(sd, "_terminate", None)
+            initialize = getattr(sd, "_initialize", None)
+            if callable(terminate):
+                terminate()
+            if callable(initialize):
+                initialize()
+        except Exception as e:
+            log(f"Audio input reset warning: {e}", "WARN")
+
+    def _reset_input_health(self):
+        self._input_ready.clear()
+        with self._input_health_lock:
+            self._input_has_signal = False
+            self._input_frames_seen = 0
+
+    def _wait_for_live_input(self) -> bool:
+        if self._input_warmup_timeout <= 0:
+            return True
+        if not self._input_ready.wait(timeout=self._input_warmup_timeout):
+            return False
+        with self._input_health_lock:
+            return self._input_has_signal
+
+    def _silent_close_stream(self):
+        if self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception as e:
+                log(f"Stream cleanup warning: {e}", "WARN")
+            self._stream = None
+
     def _callback(self, data, frames, time_info, status):
         """Audio stream callback - accumulate chunks (thread-safe)."""
+        flat = data[:, 0]
+        self._current_rms = float(np.sqrt(np.mean(data ** 2)))
+
+        with self._input_health_lock:
+            self._input_frames_seen += len(flat)
+            if np.any(np.abs(flat) > self._input_live_threshold):
+                self._input_has_signal = True
+            if self._input_has_signal or self._input_frames_seen >= 512:
+                self._input_ready.set()
+
         # Check recording flag inside lock to prevent race with stop()
         with self._chunks_lock:
             if self._recording.is_set():
-                self._chunks.append(data[:, 0].copy())
-        self._current_rms = float(np.sqrt(np.mean(data ** 2)))
+                self._chunks.append(flat.copy())

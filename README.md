@@ -523,6 +523,7 @@ Loading a model does **not** start the server.
 - Speak clearly, close to the microphone
 - Check microphone permissions in System Settings
 - Confirm the correct input device is selected
+- If the first recording after sleep, wake, or a long idle period is empty, try once more. Local Whisper now resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.
 
 </details>
 

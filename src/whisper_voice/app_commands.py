@@ -106,6 +106,8 @@ class CommandsMixin:
             audio = self.recorder.stop()
 
             if len(audio) == 0 or np.max(np.abs(audio)) == 0:
+                if len(audio) > 0:
+                    self.recorder.reset_audio_host(close_stream=False)
                 send({"type": "error", "message": "No audio captured"})
                 return
 

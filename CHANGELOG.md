@@ -4,6 +4,12 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Reset stale macOS input streams when the first recording after sleep, wake, or a long idle period opens with a PortAudio/CoreAudio error or returns all-zero audio, so hotkey recording and `wh listen` recover the microphone before surfacing a failed transcription.
+
 ## [1.6.2] - 2026-05-12
 
 ### Added

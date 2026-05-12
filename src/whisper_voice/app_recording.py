@@ -233,6 +233,7 @@ class RecordingMixin:
             # Detect all-zeros audio (mic permission issue)
             if np.max(np.abs(audio)) == 0:
                 log("Mic returned silence - check microphone permissions in System Settings", "ERR")
+                self.recorder.reset_audio_host(close_stream=False)
                 self._send_state_error("Mic permission?")
                 play_sound("Basso")
                 threading.Timer(2.0, self._reset_to_idle).start()
