@@ -83,6 +83,18 @@ def test_legacy_docs_directory_has_moved_to_mintlify_doc():
         assert (ROOT / path).is_file(), path
 
 
+def test_readme_links_to_published_documentation_site():
+    """README should send readers to the published docs, not local source files."""
+    readme = _read("README.md")
+
+    assert "https://gabrimatic.github.io/local-whisper/" in readme
+    assert "https://gabrimatic.github.io/local-whisper/reference/installation/" in readme
+    assert "https://gabrimatic.github.io/local-whisper/reference/configuration/" in readme
+    assert "https://gabrimatic.github.io/local-whisper/product/mobile/" in readme
+    assert "[doc/" not in readme
+    assert "](doc/" not in readme
+
+
 def test_github_pages_auto_deploys_mintlify_doc_updates():
     """App docs pushes to main should automatically publish the Mintlify export to Pages."""
     workflow = _read(".github/workflows/docs-pages.yml")
