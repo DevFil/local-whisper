@@ -107,12 +107,27 @@ def test_github_pages_auto_deploys_mintlify_doc_updates():
     assert '"doc/**"' in workflow
     assert '"install.sh"' in workflow
     assert '".github/workflows/docs-pages.yml"' in workflow
+    assert "runs-on: ubuntu-latest" in workflow
     assert "pages: write" in workflow
     assert "id-token: write" in workflow
     assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in workflow
+    assert "cancel-in-progress: true" in workflow
     assert "cp ../install.sh ../_site/install.sh" in workflow
     assert "Deploy GitHub Pages" in workflow
     assert "actions/deploy-pages@v4" in workflow
+
+
+def test_general_ci_does_not_run_expensive_jobs_for_docs_only_changes():
+    """Docs-only updates should use the Ubuntu Pages workflow instead of full CI."""
+    workflow = _read(".github/workflows/ci.yml")
+
+    assert '      - "doc/**"' in workflow
+    assert '      - "README.md"' in workflow
+    assert '      - ".github/workflows/docs-pages.yml"' in workflow
+    assert "group: ci-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: true" in workflow
+    assert "setup.sh syntax check" in workflow
+    assert "runs-on: ubuntu-latest" in workflow
 
 
 def test_configuration_reference_matches_generated_default_config():
