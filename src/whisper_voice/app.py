@@ -214,7 +214,7 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
         self._current_status = "Ready"
         self._send_state_update()
         key_name = self.config.hotkey.key.upper().replace("_", " ")
-        log(f"Double-tap {key_name} to record, tap to stop", "OK")
+        log(f"Double-tap {key_name} to copy, hold to paste", "OK")
 
         # Check Accessibility permission
         if not check_accessibility_trusted():
@@ -661,8 +661,8 @@ def service_main():
     print(f"  {C_BOLD}│{C_RESET}  {C_CYAN}Whisper{C_RESET} · Voice -> Text + Grammar    {C_BOLD}│{C_RESET}")
     print(f"  {C_BOLD}│{C_RESET}  {C_GREEN}100% Local{C_RESET} · No Cloud · Private      {C_BOLD}│{C_RESET}")
     print(f"  {C_BOLD}├────────────────────────────────────────┤{C_RESET}")
-    print(f"  {C_BOLD}│{C_RESET}  Double-tap {C_YELLOW}{key_name}{C_RESET} to start       {C_BOLD}│{C_RESET}")
-    print(f"  {C_BOLD}│{C_RESET}  Tap once to stop -> copy to clipboard {C_BOLD}│{C_RESET}")
+    print(f"  {C_BOLD}│{C_RESET}  Double-tap {C_YELLOW}{key_name}{C_RESET} to copy        {C_BOLD}│{C_RESET}")
+    print(f"  {C_BOLD}│{C_RESET}  Hold {C_YELLOW}{key_name}{C_RESET}, release -> paste      {C_BOLD}│{C_RESET}")
     print(f"  {C_BOLD}╰────────────────────────────────────────╯{C_RESET}")
     print()
     print(f"  {C_DIM}Engine:{C_RESET}  {config.transcription.engine}")

@@ -59,14 +59,14 @@ Only one service can run at a time. Homebrew and source installs share the same 
 
 | Action | Key |
 | --- | --- |
-| Start recording | Double-tap **Right Option** |
-| Hold to record | Hold **Right Option** past the double-tap threshold |
-| Stop and transcribe | Tap **Right Option** or **Space** |
+| Start recording and copy result | Double-tap **Right Option** |
+| Hold to record and paste result | Hold **Right Option** past the double-tap threshold, then release |
+| Stop double-tap recording | Tap **Right Option** or **Space** |
 | Cancel | **Esc** |
 | Read selected text aloud | **Option+T** |
 | Stop speech | **Option+T** again or **Esc** |
 
-The result goes to the clipboard by default. When `ui.auto_paste` is enabled, Local Whisper pastes at the active cursor while preserving the previous clipboard contents.
+Double-tap recordings go to the clipboard by default. Hold-to-record recordings paste at the active cursor while preserving the previous clipboard contents. When `ui.auto_paste` is enabled, all dictation recordings paste at the active cursor.
 
 ## Check the service
 

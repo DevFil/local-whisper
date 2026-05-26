@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-2026 Soroush Yousefpour
-"""Pipeline mixin: audio processing, transcription, grammar, clipboard, retry/copy."""
+"""Pipeline mixin: audio processing, transcription, grammar, output, retry/copy."""
 
 import re
 import subprocess
@@ -33,14 +33,14 @@ _TRANSCRIBE_HEARTBEAT_SECONDS = 2.0
 
 
 class PipelineMixin:
-    """Handles the full transcription pipeline and clipboard output."""
+    """Handles the full transcription pipeline and text output."""
 
     # ------------------------------------------------------------------
     # Processing pipeline
     # ------------------------------------------------------------------
 
-    def _process(self, audio):
-        """Process recorded audio: transcribe, fix grammar, copy to clipboard."""
+    def _process(self, audio, *, paste_at_cursor: bool = False):
+        """Process recorded audio: transcribe, fix grammar, deliver text."""
         self._touch_model_activity()
         self._current_status = "Processing..."
         self._send_state_update()
@@ -158,11 +158,12 @@ class PipelineMixin:
                 # 5. Vocabulary replacements (last text transformation)
                 final_text = self._apply_replacements(final_text)
 
-            # 6. Copy to clipboard / auto-paste
-            if config.ui.auto_paste:
-                clipboard_ok = self._paste_text_at_cursor(final_text)
-            else:
-                clipboard_ok = self._copy_to_clipboard(final_text, show_error=False)
+            # 6. Copy to clipboard / paste at cursor
+            should_paste = self._should_paste_transcription(paste_at_cursor)
+            clipboard_ok = self._deliver_transcription_text(
+                final_text,
+                paste_at_cursor=paste_at_cursor,
+            )
 
             # 7. Save backup
             self.backup.save_text(final_text)
@@ -170,7 +171,7 @@ class PipelineMixin:
 
             # 7. Send result
             if clipboard_ok:
-                self._show_success(final_text)
+                self._show_success(final_text, pasted=should_paste)
                 self._notify("Transcription Complete", truncate(final_text, PREVIEW_TRUNCATE))
             else:
                 log("Text saved but clipboard failed. Use 'Copy Last' to copy.", "WARN")
@@ -213,11 +214,13 @@ class PipelineMixin:
         self._send_state_error(status)
         threading.Timer(2.0, self._reset_to_idle).start()
 
-    def _show_success(self, text: str):
+    def _show_success(self, text: str, *, pasted: bool | None = None):
         """Display success state."""
         if self.config.ui.sounds_enabled:
             play_sound("Glass")
-        if self.config.ui.auto_paste:
+        if pasted is None:
+            pasted = self.config.ui.auto_paste
+        if pasted:
             log(f"Pasted: {truncate(text, PREVIEW_TRUNCATE)}", "OK")
             self._send_state_done(text, status="Pasted!")
         else:
@@ -367,6 +370,22 @@ class PipelineMixin:
                 self._show_error("Copy failed", f"Copy failed: {e}")
             return False
 
+    def _should_paste_transcription(self, paste_at_cursor: bool = False) -> bool:
+        """Return whether this recording should paste at the active cursor."""
+        return bool(paste_at_cursor or self.config.ui.auto_paste)
+
+    def _deliver_transcription_text(
+        self,
+        text: str,
+        *,
+        paste_at_cursor: bool = False,
+        show_copy_error: bool = False,
+    ) -> bool:
+        """Deliver transcribed text to the configured output surface."""
+        if self._should_paste_transcription(paste_at_cursor):
+            return self._paste_text_at_cursor(text)
+        return self._copy_to_clipboard(text, show_error=show_copy_error)
+
     def _paste_text_at_cursor(self, text: str) -> bool:
         """Paste via save/Cmd+V/restore, under the watchdog."""
         try:
@@ -446,14 +465,16 @@ class PipelineMixin:
 
                 final_text = self._apply_replacements(final_text)
 
-                if self.config.ui.auto_paste:
-                    ok = self._paste_text_at_cursor(final_text)
-                else:
-                    ok = self._copy_to_clipboard(final_text)
+                should_paste = self._should_paste_transcription(False)
+                ok = self._deliver_transcription_text(
+                    final_text,
+                    paste_at_cursor=False,
+                    show_copy_error=True,
+                )
                 if not ok:
                     return
 
-                self._show_success(final_text)
+                self._show_success(final_text, pasted=should_paste)
                 self.backup.save_text(final_text)
                 self.backup.save_history(raw_text, final_text)
             finally:

@@ -14,7 +14,7 @@ iOS transcribes locally with WhisperKit/Core ML. Android records local WAV audio
 
 Download the models once, then run them locally. Built-in runtime paths stay on-device or localhost. Configure LM Studio with a private LAN server only when you want that setup. No hosted speech API. No account. No telemetry. No transcript upload.
 
-Double-tap Right Option from any app to start recording, tap Right Option or Space to stop, and press Esc to cancel.
+Double-tap Right Option from any app to start recording and copy the result. Hold Right Option to record until release, then paste the result at the current cursor.
 
 Use the menu bar for status, engine and grammar switching, history, settings, updates, and service controls. Parakeet-TDT v3 is the default macOS transcription engine.
 
@@ -102,9 +102,9 @@ Details: [Installation](https://gabrimatic.github.io/local-whisper/reference/ins
 
 | Action | Key |
 |--------|-----|
-| Start recording | Double-tap **Right Option** |
-| Hold to record | Hold **Right Option** past double-tap threshold |
-| Stop and transcribe | Tap **Right Option** or **Space** |
+| Start recording and copy result | Double-tap **Right Option** |
+| Hold to record and paste result | Hold **Right Option** past double-tap threshold, then release |
+| Stop double-tap recording | Tap **Right Option** or **Space** |
 | Cancel | **Esc** |
 | Read selected text aloud | **⌥T** |
 | Stop speech | **⌥T** again or **Esc** |
@@ -113,7 +113,7 @@ Details: [Installation](https://gabrimatic.github.io/local-whisper/reference/ins
 
 ## Features
 
-- **Global dictation hotkey**: start recording from any app without focusing a Local Whisper window. Stop with Right Option or Space; the final text lands on the clipboard or pastes at the cursor.
+- **Global dictation hotkey**: start recording from any app without focusing a Local Whisper window. Double-tap Right Option copies the final text by default; hold Right Option records until release and pastes the final text at the cursor.
 - **Local transcription** via in-process MLX for Parakeet-TDT v3 and Qwen3-ASR. WhisperKit is available through a local server.
 - **Local grammar correction** via Apple Intelligence, Ollama, or LM Studio; optional.
 - **Text-to-speech** reads selected text aloud in any app with multiple voices and streaming playback through Kokoro MLX.
@@ -483,8 +483,8 @@ Recordings longer than five minutes use the chunked pipeline. Each VAD segment i
 └──────────────────────────┬────────────────────────────────┘
                            ▼
 ┌───────────────────────────────────────────────────────────┐
-│  Clipboard · Saved to ~/.whisper/                         │
-│  (auto_paste: pasted at cursor, clipboard preserved)      │
+│  Clipboard or cursor paste · Saved to ~/.whisper/          │
+│  (hold-to-record pastes; auto_paste pastes all dictation) │
 └───────────────────────────────────────────────────────────┘
 ```
 

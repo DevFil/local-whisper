@@ -196,6 +196,7 @@ class RecordingMixin:
         """Stop recording and process audio."""
         import numpy as np
 
+        paste_at_cursor = self._hold_recording
         self._hold_recording = False
         if self._key_interceptor:
             self._key_interceptor.set_recording_active(False)
@@ -259,7 +260,12 @@ class RecordingMixin:
         self._send_state_update(phase="processing", status_text="Processing...")
 
         # Start processing outside the lock
-        threading.Thread(target=self._process, args=(audio,), daemon=True).start()
+        threading.Thread(
+            target=self._process,
+            args=(audio,),
+            kwargs={"paste_at_cursor": paste_at_cursor},
+            daemon=True,
+        ).start()
 
     def _auto_stop(self):
         """Auto-stop recording when max duration exceeded."""

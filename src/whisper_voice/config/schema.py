@@ -220,7 +220,8 @@ sounds_enabled = true
 # Show macOS notifications on completion/error
 notifications_enabled = false
 
-# Automatically paste transcribed text at the cursor after transcription completes
+# Paste every dictation at the cursor after transcription completes.
+# Hold-to-record always pastes, even when this is false.
 auto_paste = false
 
 [backup]

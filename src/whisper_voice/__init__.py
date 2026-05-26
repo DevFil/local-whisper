@@ -3,7 +3,7 @@
 """
 Local Whisper - Local voice transcription with grammar correction for macOS
 
-Double-tap Right Option -> speak -> tap to stop -> polished text copied to clipboard.
+Double-tap Right Option copies dictation; hold Right Option records until release and pastes at the cursor.
 Built-in speech paths run on-device or localhost after setup. No hosted speech API or telemetry.
 """
 
