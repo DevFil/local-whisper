@@ -128,7 +128,7 @@ def test_github_pages_auto_deploys_mintlify_doc_updates():
     assert "cancel-in-progress: true" in workflow
     assert "cp ../install.sh ../_site/install.sh" in workflow
     assert "Deploy GitHub Pages" in workflow
-    assert "actions/deploy-pages@v4" in workflow
+    assert "actions/deploy-pages@v5" in workflow
 
 
 def test_general_ci_does_not_run_expensive_jobs_for_docs_only_changes():
