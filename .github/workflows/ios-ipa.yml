@@ -1,0 +1,49 @@
+name: iOS IPA Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/flutter/local_whisper/**"
+      - ".github/workflows/ios-ipa.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/flutter/local_whisper/**"
+      - ".github/workflows/ios-ipa.yml"
+
+jobs:
+  build-iphone-ipa:
+    name: Build iPhone IPA
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: src/flutter/local_whisper
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build unsigned iPhone IPA
+        run: flutter build ipa --release --target-platform=ios-arm64 --no-codesign
+
+      - name: Verify IPA output
+        run: |
+          test -d build/ios/ipa
+          find build/ios/ipa -name "*.ipa" -print -quit | grep -q ".ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-ipa
+          path: src/flutter/local_whisper/build/ios/ipa/*.ipa
+          if-no-files-found: error
