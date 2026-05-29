@@ -13,6 +13,9 @@ on:
       - "src/flutter/local_whisper/**"
       - ".github/workflows/ios-ipa.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build-iphone-ipa:
     name: Build iPhone IPA
