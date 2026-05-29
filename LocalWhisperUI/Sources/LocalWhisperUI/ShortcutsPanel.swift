@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ShortcutsPanel: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView {
@@ -47,7 +48,7 @@ struct ShortcutsPanel: View {
                 title: "Proofread",
                 description: "Mechanical fixes: spelling, punctuation, capitalisation.",
                 icon: "checkmark.seal.fill",
-                tint: .green,
+                tint: Theme.Tone.success.color(for: colorScheme),
                 value: appState.config.shortcuts.proofread,
                 onCommit: { v in
                     appState.config.shortcuts.proofread = v

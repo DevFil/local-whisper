@@ -10,23 +10,26 @@ offers cache removal so users can reclaim gigabytes without leaving the app.
 
 import os
 import shutil
+import math
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 MODEL_DIR = Path.home() / ".whisper" / "models"
 
-# Engine id → (HF repo id, cache dir name, warm sentinel filename).
+# Engine id → Hugging Face repo metadata.
 # `hf_repo` is what HuggingFace writes as ``models--<org>--<name>``.
-ENGINE_MODEL_MAP: Dict[str, Dict[str, str]] = {
+ENGINE_MODEL_MAP: Dict[str, Dict[str, object]] = {
     "parakeet_v3": {
         "hf_repo": "mlx-community/parakeet-tdt-0.6b-v3",
         "cache_dir": "models--mlx-community--parakeet-tdt-0.6b-v3",
         "warm_sentinel": ".parakeet_v3_warmed",
+        "required_files": ("config.json", "model.safetensors"),
     },
     "qwen3_asr": {
         "hf_repo": "mlx-community/Qwen3-ASR-1.7B-bf16",
         "cache_dir": "models--mlx-community--Qwen3-ASR-1.7B-bf16",
         "warm_sentinel": ".qwen3_warmed",
+        "required_files": ("config.json", "model.safetensors"),
     },
     # whisperkit: models live under WhisperKit's own cache; not managed here.
 }
@@ -46,7 +49,41 @@ def _dir_size_bytes(path: Path) -> int:
 
 
 def _bytes_to_mb(n: int) -> int:
-    return int(round(n / (1024 * 1024)))
+    if n <= 0:
+        return 0
+    return max(1, int(math.ceil(n / (1024 * 1024))))
+
+
+def hf_cache_complete(cache_path: Path, required_files: Iterable[str]) -> bool:
+    """Return True only when a HF cache has a usable snapshot.
+
+    Hugging Face creates refs, locks, and partial blob files before the model is
+    usable. A cache directory existing is therefore not enough; the UI should
+    show partial/resumable until one snapshot contains the minimum files the
+    engine needs to load.
+    """
+    if not cache_path.is_dir():
+        return False
+    snapshots_dir = cache_path / "snapshots"
+    if not snapshots_dir.is_dir():
+        return False
+    required = tuple(required_files)
+    for snapshot in snapshots_dir.iterdir():
+        if not snapshot.is_dir():
+            continue
+        complete = True
+        for rel in required:
+            candidate = snapshot / rel
+            try:
+                if not candidate.is_file() or candidate.stat().st_size <= 0:
+                    complete = False
+                    break
+            except OSError:
+                complete = False
+                break
+        if complete:
+            return True
+    return False
 
 
 def engine_model_status(engine_id: str) -> Dict:
@@ -69,13 +106,17 @@ def engine_model_status(engine_id: str) -> Dict:
             "hf_repo": None,
         }
 
-    cache_path = MODEL_DIR / info["cache_dir"]
-    warmed_path = MODEL_DIR / info["warm_sentinel"]
-    downloaded = cache_path.is_dir() and any(cache_path.iterdir())
-    size_mb = _bytes_to_mb(_dir_size_bytes(cache_path)) if downloaded else 0
+    cache_path = MODEL_DIR / str(info["cache_dir"])
+    warmed_path = MODEL_DIR / str(info["warm_sentinel"])
+    size_bytes = _dir_size_bytes(cache_path) if cache_path.exists() else 0
+    required_files = tuple(info.get("required_files", ()))
+    downloaded = hf_cache_complete(cache_path, required_files)
+    download_status = "downloaded" if downloaded else ("partial" if size_bytes > 0 else "missing")
+    size_mb = _bytes_to_mb(size_bytes)
     return {
         "downloaded": downloaded,
-        "size_mb": size_mb if downloaded else 0,
+        "download_status": download_status,
+        "size_mb": size_mb,
         "warmed": warmed_path.exists(),
         "cache_dir": str(cache_path),
         "hf_repo": info["hf_repo"],
@@ -102,11 +143,11 @@ def remove_engine_cache(engine_id: str) -> bool:
     if info is None:
         return False
     removed = False
-    cache_path = MODEL_DIR / info["cache_dir"]
+    cache_path = MODEL_DIR / str(info["cache_dir"])
     if cache_path.is_dir():
         shutil.rmtree(cache_path, ignore_errors=True)
         removed = True
-    warmed_path = MODEL_DIR / info["warm_sentinel"]
+    warmed_path = MODEL_DIR / str(info["warm_sentinel"])
     if warmed_path.exists():
         try:
             warmed_path.unlink()

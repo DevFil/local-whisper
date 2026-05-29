@@ -95,7 +95,7 @@ final class AppState {
             // Keep terminal states ("ready"/"error") around briefly so the UI
             // can flash the outcome — the panel clears them after the card
             // animates the change.
-            if progress.phase == "ready" {
+            if progress.phase == "ready" || progress.phase == "canceled" {
                 downloadStates[progress.target] = progress
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 1_500_000_000)

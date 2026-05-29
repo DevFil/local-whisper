@@ -10,6 +10,7 @@ struct AdvancedPanel: View {
         ScrollView {
             Form {
                 connectionSection
+                permissionsSection
                 storageSection
                 lifecycleSection
                 diagnosticsSection
@@ -61,6 +62,36 @@ struct AdvancedPanel: View {
         case "ollama":             return "Ollama"
         case "lm_studio":          return "LM Studio"
         default:                   return appState.config.grammar.backend
+        }
+    }
+
+    // MARK: - Permissions
+
+    private var permissionsSection: some View {
+        Section {
+            HStack(spacing: Theme.Spacing.s) {
+                Button {
+                    appState.ipcClient?.sendAction("request_microphone_permission")
+                } label: {
+                    Label("Request microphone", systemImage: "mic.fill")
+                }
+                Button {
+                    appState.ipcClient?.sendAction("request_accessibility_permission")
+                } label: {
+                    Label("Request accessibility", systemImage: "keyboard.fill")
+                }
+            }
+
+            InlineNotice(
+                kind: .info,
+                text: "Use these when macOS did not show the prompt during setup. If access was denied before, the matching System Settings page opens."
+            )
+        } header: {
+            SettingsSectionHeader(
+                symbol: "lock.shield",
+                title: "Permissions",
+                description: "Ask macOS for the access needed by global dictation."
+            )
         }
     }
 

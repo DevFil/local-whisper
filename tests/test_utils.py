@@ -196,6 +196,34 @@ class TestTruncate:
 
 
 # ---------------------------------------------------------------------------
+# Microphone permissions
+# ---------------------------------------------------------------------------
+
+class TestMicrophonePermission:
+    def test_missing_avfoundation_is_not_reported_as_success(self):
+        u = _import_utils()
+
+        with patch.dict("sys.modules", {"AVFoundation": None}):
+            ok, msg = u.check_microphone_permission()
+
+        assert ok is False
+        assert "AVFoundation" in msg
+
+    def test_request_microphone_permission_opens_settings_when_not_granted(self):
+        u = _import_utils()
+
+        with (
+            patch.object(u, "check_microphone_permission", return_value=(False, "denied")),
+            patch.object(u.subprocess, "Popen") as popen,
+        ):
+            ok, msg = u.request_microphone_permission()
+
+        assert ok is False
+        assert msg == "denied"
+        popen.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # HALLUCINATION_PATTERNS list
 # ---------------------------------------------------------------------------
 

@@ -96,8 +96,9 @@ def _service_section() -> str:
 def _packages_section() -> str:
     lines = ["## Python packages", ""]
     packages = [
-        "sounddevice", "numpy", "pynput", "qwen3_asr_mlx", "kokoro_mlx",
-        "requests", "soundfile", "misaki", "apple_fm_sdk",
+        "sounddevice", "numpy", "pynput", "pyobjc-framework-AVFoundation",
+        "qwen3_asr_mlx", "kokoro_mlx", "requests", "soundfile", "misaki",
+        "apple_fm_sdk",
     ]
     for pkg in packages:
         version = _pkg_version(pkg)

@@ -162,8 +162,8 @@ class RecordingMixin:
                 return
 
             if not self.recorder.start():
-                log("Mic error", "ERR")
-                self._send_state_error("Mic error")
+                error = getattr(self.recorder, "last_error_message", None) or "Mic error"
+                self._send_state_error(error)
                 play_sound("Basso")
                 threading.Timer(
                     2.0,
@@ -232,9 +232,13 @@ class RecordingMixin:
 
             # Detect all-zeros audio (mic permission issue)
             if np.max(np.abs(audio)) == 0:
-                log("Mic returned silence - check microphone permissions in System Settings", "ERR")
+                error = "Mic permission?"
+                formatter = getattr(self.recorder, "no_signal_error_message", None)
+                if callable(formatter):
+                    error = formatter()
+                log(error, "ERR")
                 self.recorder.reset_audio_host(close_stream=False)
-                self._send_state_error("Mic permission?")
+                self._send_state_error(error)
                 play_sound("Basso")
                 threading.Timer(2.0, self._reset_to_idle).start()
                 self.recorder.start_monitoring()

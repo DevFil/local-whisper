@@ -99,10 +99,16 @@ private struct EngineCard: View {
     let onRequestRemove: (EngineStatus) -> Void
 
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     private var isDownloading: Bool {
         guard let download else { return false }
         return download.phase == "downloading" || download.phase == "preparing" || download.phase == "warming"
+    }
+
+    private var canCancelDownload: Bool {
+        guard let download else { return false }
+        return download.phase == "downloading" || download.phase == "preparing"
     }
 
     var body: some View {
@@ -133,9 +139,7 @@ private struct EngineCard: View {
 
                 Spacer(minLength: Theme.Spacing.s)
 
-                if !isDownloading {
-                    actionButton
-                }
+                actionButton
             }
 
             if let download, isDownloading || download.phase == "error" {
@@ -177,17 +181,20 @@ private struct EngineCard: View {
 
     private var pillText: String {
         if let d = download, d.phase == "error" { return "Failed" }
+        if let d = download, d.phase == "warming" { return "Loading" }
         if isDownloading { return "Downloading" }
-        if engine.active { return "Active" }
+        if engine.active { return "In use" }
         if engine.downloaded { return "Downloaded" }
+        if engine.downloadStatus == "partial" { return "Partial" }
         return "Not downloaded"
     }
 
     private var pillTone: Theme.Tone {
         if let d = download, d.phase == "error" { return .danger }
         if isDownloading { return .info }
-        if engine.active { return .success }
+        if engine.active { return engine.downloaded ? .success : .warning }
         if engine.downloaded { return .info }
+        if engine.downloadStatus == "partial" { return .warning }
         return .neutral
     }
 
@@ -195,8 +202,14 @@ private struct EngineCard: View {
         var parts: [String] = []
         if engine.downloaded, let mb = engine.sizeMb, mb > 0 {
             parts.append(formatSize(mb: mb))
+        } else if engine.downloadStatus == "partial" {
+            if let mb = engine.sizeMb, mb > 0 {
+                parts.append("\(formatSize(mb: mb)) partial")
+            } else {
+                parts.append("partial download")
+            }
         } else if !engine.downloaded {
-            parts.append("downloads on first use")
+            parts.append(engine.active ? "cache missing" : "not downloaded")
         }
         if engine.warmed { parts.append("warmed") }
         if let repo = engine.hfRepo, !repo.isEmpty {
@@ -215,10 +228,23 @@ private struct EngineCard: View {
 
     @ViewBuilder
     private var actionButton: some View {
-        if engine.active {
+        if isDownloading {
+            if canCancelDownload {
+                Button("Cancel") {
+                    appState.ipcClient?.sendAction("cancel_download", id: engine.id)
+                }
+                .buttonStyle(.bordered)
+                .help("Cancel this model download and keep the current engine.")
+            } else {
+                Label("Loading", systemImage: "hourglass")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.secondary)
+                    .help("Model weights are loading into memory.")
+            }
+        } else if engine.active {
             Label("In use", systemImage: "checkmark.circle.fill")
                 .labelStyle(.iconOnly)
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.Tone.success.color(for: colorScheme))
                 .help("This engine is currently loaded.")
         } else if let d = download, d.phase == "error" {
             Button("Retry") {
@@ -238,7 +264,7 @@ private struct EngineCard: View {
                 .help("Remove this engine's weights from disk.")
             }
         } else if engine.cacheDir != nil {
-            Button("Use & download") { switchTo(engine.id) }
+            Button(engine.downloadStatus == "partial" ? "Resume download" : "Download and use") { switchTo(engine.id) }
             .buttonStyle(.bordered)
             .help("Switches to this engine and downloads the model.")
         } else {
@@ -250,7 +276,6 @@ private struct EngineCard: View {
     }
 
     private func switchTo(_ id: String) {
-        appState.config.transcription.engine = id
         appState.ipcClient?.sendEngineSwitch(id)
     }
 }

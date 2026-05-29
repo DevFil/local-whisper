@@ -111,7 +111,8 @@ class CommandsMixin:
         try:
             # Start recording
             if not self.recorder.start():
-                send({"type": "error", "message": "Microphone error"})
+                message = getattr(self.recorder, "last_error_message", None) or "Microphone error"
+                send({"type": "error", "message": message})
                 return
 
             # Wait for stop_event (Ctrl+C on CLI side) or max_duration
@@ -127,7 +128,9 @@ class CommandsMixin:
             if len(audio) == 0 or np.max(np.abs(audio)) == 0:
                 if len(audio) > 0:
                     self.recorder.reset_audio_host(close_stream=False)
-                send({"type": "error", "message": "No audio captured"})
+                formatter = getattr(self.recorder, "no_signal_error_message", None)
+                message = formatter() if callable(formatter) and len(audio) > 0 else "No audio captured"
+                send({"type": "error", "message": message})
                 return
 
             # Process audio

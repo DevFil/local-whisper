@@ -385,6 +385,7 @@ struct EngineStatus: Codable, Sendable, Identifiable {
     var description: String
     var active: Bool
     var downloaded: Bool
+    var downloadStatus: String?
     var sizeMb: Int?
     var warmed: Bool
     var cacheDir: String?
@@ -392,6 +393,7 @@ struct EngineStatus: Codable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, active, downloaded, warmed
+        case downloadStatus = "download_status"
         case sizeMb = "size_mb"
         case cacheDir = "cache_dir"
         case hfRepo = "hf_repo"

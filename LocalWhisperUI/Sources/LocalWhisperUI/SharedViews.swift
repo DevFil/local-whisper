@@ -162,6 +162,7 @@ struct InlineNotice: View {
     enum Kind { case info, warning, error, success }
     let kind: Kind
     let text: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.s) {
@@ -188,9 +189,9 @@ struct InlineNotice: View {
     private var tint: Color {
         switch kind {
         case .info:    return .secondary
-        case .warning: return Theme.Tone.warning.color
-        case .error:   return Theme.Tone.danger.color
-        case .success: return Theme.Tone.success.color
+        case .warning: return Theme.Tone.warning.color(for: colorScheme)
+        case .error:   return Theme.Tone.danger.color(for: colorScheme)
+        case .success: return Theme.Tone.success.color(for: colorScheme)
         }
     }
 }
@@ -206,7 +207,7 @@ struct StatusPill: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(tone.color)
+                .fill(tone.color(for: colorScheme))
                 .frame(width: 6, height: 6)
             Text(text)
                 .font(Theme.Typography.captionEmphasized)
@@ -221,16 +222,13 @@ struct StatusPill: View {
 
     private var background: AnyShapeStyle {
         let opacity: Double = colorScheme == .dark ? 0.22 : 0.14
-        return AnyShapeStyle(tone.color.opacity(opacity))
+        return AnyShapeStyle(tone.color(for: colorScheme).opacity(opacity))
     }
 
     private var foreground: Color {
         switch tone {
         case .neutral: return .secondary
-        case .success: return colorScheme == .dark ? .green : Color(nsColor: .systemGreen).mix(with: .black, by: 0.25)
-        case .warning: return colorScheme == .dark ? .orange : Color(nsColor: .systemOrange).mix(with: .black, by: 0.25)
-        case .danger:  return colorScheme == .dark ? .red : Color(nsColor: .systemRed).mix(with: .black, by: 0.20)
-        case .info:    return .accentColor
+        default:       return tone.color(for: colorScheme)
         }
     }
 }
@@ -252,13 +250,14 @@ extension Text {
 
 struct DownloadProgressBar: View {
     let progress: DownloadProgress
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: Theme.Spacing.s) {
                 Text(phaseLabel)
                     .font(Theme.Typography.captionEmphasized)
-                    .foregroundStyle(tone.color)
+                    .foregroundStyle(toneColor)
                 Spacer(minLength: Theme.Spacing.s)
                 Text(byteLabel)
                     .font(Theme.Typography.mono)
@@ -269,17 +268,17 @@ struct DownloadProgressBar: View {
             if isIndeterminate {
                 ProgressView()
                     .progressViewStyle(.linear)
-                    .tint(tone.color)
+                    .tint(toneColor)
             } else {
                 ProgressView(value: clampedValue, total: 1.0)
                     .progressViewStyle(.linear)
-                    .tint(tone.color)
+                    .tint(toneColor)
             }
 
             if let error = progress.error, !error.isEmpty {
                 Text(error)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Tone.danger.color)
+                    .foregroundStyle(Theme.Tone.danger.color(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -298,9 +297,14 @@ struct DownloadProgressBar: View {
         switch progress.phase {
         case "error":    return .danger
         case "ready":    return .success
+        case "canceled": return .warning
         case "warming":  return .info
         default:         return .info
         }
+    }
+
+    private var toneColor: Color {
+        tone.color(for: colorScheme)
     }
 
     private var phaseLabel: String {
@@ -309,6 +313,7 @@ struct DownloadProgressBar: View {
         case "downloading": return "Downloading…"
         case "warming":     return "Warming up…"
         case "ready":       return "Ready"
+        case "canceled":    return "Canceled"
         case "error":       return "Download failed"
         default:            return progress.phase.capitalized
         }

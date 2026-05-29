@@ -82,11 +82,13 @@ struct GrammarPanel: View {
 
 struct AppleIntelligenceSection: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Section {
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(Theme.Tone.success.color(for: colorScheme))
                 Text("Foundation Models run entirely on-device. Requires macOS 26+ with Apple Intelligence enabled.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

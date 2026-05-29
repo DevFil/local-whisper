@@ -13,6 +13,14 @@ enum Theme {
         static let panel = Color(red: 18 / 255, green: 24 / 255, blue: 33 / 255)
         static let accent = Color(red: 117 / 255, green: 227 / 255, blue: 190 / 255)
         static let sky = Color(red: 141 / 255, green: 220 / 255, blue: 255 / 255)
+
+        static func accent(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? accent : Color(red: 0 / 255, green: 113 / 255, blue: 86 / 255)
+        }
+
+        static func sky(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? sky : Color(red: 0 / 255, green: 100 / 255, blue: 145 / 255)
+        }
     }
 
     // MARK: Typography
@@ -71,12 +79,21 @@ enum Theme {
 
         @MainActor
         var color: Color {
+            color(for: .dark)
+        }
+
+        @MainActor
+        func color(for colorScheme: ColorScheme) -> Color {
             switch self {
             case .neutral: return .secondary
-            case .success: return .green
-            case .warning: return .orange
-            case .danger:  return .red
-            case .info:    return .accentColor
+            case .success:
+                return colorScheme == .dark ? .green : Color(nsColor: .systemGreen).mix(with: .black, by: 0.32)
+            case .warning:
+                return colorScheme == .dark ? .orange : Color(nsColor: .systemOrange).mix(with: .black, by: 0.25)
+            case .danger:
+                return colorScheme == .dark ? .red : Color(nsColor: .systemRed).mix(with: .black, by: 0.18)
+            case .info:
+                return colorScheme == .dark ? .accentColor : Color(nsColor: .controlAccentColor).mix(with: .black, by: 0.18)
             }
         }
     }
@@ -88,15 +105,20 @@ enum Theme {
 
         @MainActor
         var color: Color {
+            color(for: .dark)
+        }
+
+        @MainActor
+        func color(for colorScheme: ColorScheme) -> Color {
             switch self {
             case .recording:    return .red
             case .transcription: return .blue
             case .grammar:      return .indigo
-            case .voice:        return .teal
+            case .voice:        return colorScheme == .dark ? .teal : Color(nsColor: .systemTeal).mix(with: .black, by: 0.20)
             case .vocabulary:   return .orange
-            case .output:       return Theme.Brand.sky
+            case .output:       return Theme.Brand.sky(for: colorScheme)
             case .shortcuts:    return .pink
-            case .activity:     return .green
+            case .activity:     return colorScheme == .dark ? .green : Color(nsColor: .systemGreen).mix(with: .black, by: 0.32)
             case .advanced:     return .gray
             case .about:        return .secondary
             }
@@ -134,12 +156,17 @@ struct SectionIcon: View {
     let tint: Color
     var diameter: CGFloat = 32
     var fontSize: CGFloat = 14
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(tint.opacity(0.16))
+                .fill(tint.opacity(colorScheme == .dark ? 0.16 : 0.12))
                 .frame(width: diameter, height: diameter)
+                .overlay(
+                    Circle()
+                        .strokeBorder(tint.opacity(colorScheme == .dark ? 0.18 : 0.24), lineWidth: 1)
+                )
             Image(systemName: symbol)
                 .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(tint)

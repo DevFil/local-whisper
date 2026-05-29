@@ -158,8 +158,8 @@ def cmd_doctor(args: list):
 
     # 3. Core Python packages
     missing_pkgs = []
-    for pkg in ["sounddevice", "numpy", "pynput", "parakeet_mlx", "qwen3_asr_mlx",
-                "kokoro_mlx", "requests", "soundfile", "misaki"]:
+    for pkg in ["sounddevice", "numpy", "pynput", "AVFoundation", "parakeet_mlx",
+                "qwen3_asr_mlx", "kokoro_mlx", "requests", "soundfile", "misaki"]:
         try:
             __import__(pkg)
         except ImportError:

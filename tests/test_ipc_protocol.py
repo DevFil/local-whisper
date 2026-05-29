@@ -46,8 +46,11 @@ def make_notification(title: str, body: str) -> dict:
 
 
 # Incoming messages from Swift → Python
-def make_action(action: str) -> dict:
-    return {"type": "action", "action": action}
+def make_action(action: str, id: str | None = None) -> dict:
+    msg = {"type": "action", "action": action}
+    if id is not None:
+        msg["id"] = id
+    return msg
 
 
 def make_engine_switch(engine: str) -> dict:
@@ -114,6 +117,11 @@ class TestJsonRoundTrip:
         parsed = json.loads(json.dumps(msg))
         assert parsed["type"] == "action"
         assert parsed["action"] == "stop_recording"
+
+    def test_cancel_download_action_serializes_target(self):
+        msg = make_action("cancel_download", id="qwen3_asr")
+        parsed = json.loads(json.dumps(msg))
+        assert parsed == {"type": "action", "action": "cancel_download", "id": "qwen3_asr"}
 
     def test_engine_switch_serializes(self):
         msg = make_engine_switch("whisperkit")
@@ -239,6 +247,32 @@ class TestIncomingMessageParsing:
         msg = json.loads(raw.strip())
         assert msg["type"] == "action"
         assert msg["action"] == "cancel"
+
+    def test_ipc_cancel_download_dispatches_to_switching_mixin(self, monkeypatch):
+        from unittest.mock import Mock
+
+        import whisper_voice.app_ipc as app_ipc
+        from whisper_voice.app_ipc import IPCMixin
+
+        class ImmediateThread:
+            def __init__(self, target, args=(), kwargs=None, daemon=None):
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs or {}
+
+            def start(self):
+                self.target(*self.args, **self.kwargs)
+
+        class FakeApp(IPCMixin):
+            pass
+
+        app = FakeApp()
+        app._cancel_download = Mock()
+        monkeypatch.setattr(app_ipc.threading, "Thread", ImmediateThread)
+
+        app._handle_ipc_message(make_action("cancel_download", id="qwen3_asr"))
+
+        app._cancel_download.assert_called_once_with("qwen3_asr")
 
     def test_parse_config_update_int_value(self):
         raw = json.dumps(make_config_update("qwen3_asr", "repetition_context_size", 200))

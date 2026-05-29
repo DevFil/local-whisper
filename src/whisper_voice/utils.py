@@ -190,11 +190,27 @@ def check_microphone_permission() -> tuple[bool, str]:
         return False, f"Unknown microphone authorization status: {status}"
 
     except ImportError:
-        # AVFoundation not available - skip check, let it fail later if needed
-        return True, "Could not check microphone permission (AVFoundation unavailable)"
+        return False, (
+            "Microphone permission check unavailable because "
+            "pyobjc-framework-AVFoundation is missing. Run wh doctor --fix, "
+            "then retry."
+        )
     except Exception as e:
-        # Don't block startup on permission check failures
-        return True, f"Could not check microphone permission: {e}"
+        return False, f"Could not check microphone permission: {e}"
+
+
+def request_microphone_permission() -> tuple[bool, str]:
+    """Request microphone permission, opening Settings when macOS cannot prompt."""
+    ok, msg = check_microphone_permission()
+    if not ok:
+        try:
+            subprocess.Popen([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+            ])
+        except Exception:
+            pass
+    return ok, msg
 
 
 _notification_sender = None
@@ -269,7 +285,7 @@ def check_accessibility_trusted() -> bool:
 _accessibility_prompt_shown = False
 
 
-def request_accessibility_permission() -> bool:
+def request_accessibility_permission(force: bool = False) -> bool:
     """
     Trigger the macOS Accessibility permission prompt.
     Opens System Settings → Accessibility with this process highlighted.
@@ -277,8 +293,8 @@ def request_accessibility_permission() -> bool:
     Only shows the prompt once per process lifetime.
     """
     global _accessibility_prompt_shown
-    if _accessibility_prompt_shown:
-        return False
+    if _accessibility_prompt_shown and not force:
+        return check_accessibility_trusted()
     _accessibility_prompt_shown = True
     try:
         import ctypes

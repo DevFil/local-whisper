@@ -2,6 +2,10 @@
 # Copyright (c) 2025-2026 Soroush Yousefpour
 """Switching mixin: engine and backend switching with rollback."""
 
+import os
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -11,11 +15,12 @@ from .config import get_config
 from .engines import ENGINE_REGISTRY
 from .engines.download_progress import (
     DownloadWatcher,
-    expected_size_bytes,
     kokoro_cache_path,
 )
 from .engines.status import (
+    MODEL_DIR,
     engine_model_status,
+    hf_cache_complete,
     remove_engine_cache,
 )
 from .grammar import Grammar
@@ -63,20 +68,105 @@ class SwitchingMixin:
     # Engine / backend switching
     # ------------------------------------------------------------------
 
+    def _register_download_cancel(self, target_id: str, event: threading.Event) -> None:
+        lock = getattr(self, "_download_cancel_lock", None)
+        events = getattr(self, "_download_cancel_events", None)
+        if lock is None or events is None:
+            return
+        with lock:
+            events[target_id] = event
+
+    def _clear_download_cancel(self, target_id: str, event: threading.Event) -> None:
+        lock = getattr(self, "_download_cancel_lock", None)
+        events = getattr(self, "_download_cancel_events", None)
+        if lock is None or events is None:
+            return
+        with lock:
+            if events.get(target_id) is event:
+                events.pop(target_id, None)
+
+    def _cancel_download(self, target_id: str):
+        """Cancel an active Settings-triggered model download."""
+        lock = getattr(self, "_download_cancel_lock", None)
+        events = getattr(self, "_download_cancel_events", None)
+        event = None
+        if lock is not None and events is not None:
+            with lock:
+                event = events.get(target_id)
+        if event is None:
+            log(f"No active download to cancel for {target_id}", "INFO")
+            return
+        event.set()
+        log(f"Cancel requested for {target_id} download", "INFO")
+
+    def _prefetch_hf_snapshot(
+        self,
+        target_id: str,
+        hf_repo: str,
+        cancel_event: threading.Event,
+    ) -> tuple[bool, str]:
+        """Download a HF snapshot in a subprocess so Settings can cancel it."""
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        code = (
+            "from huggingface_hub import snapshot_download\n"
+            f"snapshot_download(repo_id={hf_repo!r}, cache_dir={str(MODEL_DIR)!r})\n"
+        )
+        env = os.environ.copy()
+        env["HF_HUB_CACHE"] = str(MODEL_DIR)
+        env["HF_HUB_DISABLE_TELEMETRY"] = "1"
+        env.pop("HF_HUB_OFFLINE", None)
+
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8") as stderr_file:
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, "-c", code],
+                    stdout=subprocess.DEVNULL,
+                    stderr=stderr_file,
+                    env=env,
+                )
+            except Exception as e:
+                return False, str(e)
+
+            while proc.poll() is None:
+                if cancel_event.is_set():
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=3.0)
+                    return False, "Download canceled"
+                time.sleep(0.2)
+
+            stderr_file.seek(0)
+            stderr = stderr_file.read().strip()
+            if proc.returncode != 0:
+                return False, stderr or f"{target_id} download exited with {proc.returncode}"
+        if cancel_event.is_set():
+            return False, "Download canceled"
+        return True, ""
+
     def _switch_engine(self, engine_name: str):
         """Switch transcription engine in-process with rollback on failure.
 
         Two signals run in parallel:
-          - `state_update.status_text` narrates the step in the menu bar
-            ("Unloading <old>…", "Downloading <new>…" / "Loading <new>…",
-            "Ready").
+          - `state_update.status_text` narrates the step in the menu bar while
+            staying in the idle phase, so model downloads do not open the
+            dictation overlay.
           - `download_progress` streams bytes + percent to the Settings panel
             so the card shows a real inline progress bar during HF pulls.
         """
-        if self._busy:
-            log("Cannot switch engine while processing", "WARN")
-            return
+        with self._state_lock:
+            if self._busy:
+                log("Cannot switch engine while processing", "WARN")
+                return
+            self._busy = True
+            self._settings_operation_active = True
+
         if engine_name not in ENGINE_REGISTRY:
+            with self._state_lock:
+                self._settings_operation_active = False
+                self._busy = False
             self._send_state_error(f"Unknown engine: {engine_name}")
             return
 
@@ -89,40 +179,62 @@ class SwitchingMixin:
         cache_dir = status.get("cache_dir")
         hf_repo = status.get("hf_repo")
 
-        def _status(text: str, phase: str = "processing"):
+        def _status(text: str):
             self._current_status = text
-            self._send_state_update(phase, status_text=text)
+            self._send_state_update("idle", status_text=text)
 
         # Spin up an inline-progress watcher so the Settings panel can show a
         # real bar. Skipped for engines like WhisperKit whose weights live
         # outside the HF cache.
         watcher: 'DownloadWatcher | None' = None
+        cancel_event = threading.Event()
+        old_unloaded = False
+        if needs_download and cache_dir and hf_repo:
+            self._register_download_cancel(engine_name, cancel_event)
         if cache_dir and hf_repo:
-            total = expected_size_bytes(hf_repo) if needs_download else 0
             watcher = DownloadWatcher(
-                engine_name, Path(cache_dir), total, self.ipc.send
+                engine_name, Path(cache_dir), 0, self.ipc.send
             )
             watcher.start()
 
         try:
-            # Phase 1: free the old engine before loading the new one so peak RAM stays low.
+            # Download before unloading the currently working engine. If the
+            # network fails or the user cancels, dictation remains on the old
+            # model instead of being left with no transcriber.
+            if needs_download and cache_dir and hf_repo:
+                _status(f"Downloading {new_name} model...")
+                if watcher is not None:
+                    watcher.set_phase("downloading")
+                ok, err = self._prefetch_hf_snapshot(engine_name, hf_repo, cancel_event)
+                if cancel_event.is_set():
+                    msg = f"{new_name} download canceled"
+                    if watcher is not None:
+                        watcher.finish(error=msg, phase="canceled")
+                        watcher = None
+                    _status(msg)
+                    self._send_engines_status()
+                    return
+                if not ok:
+                    raise RuntimeError(err or f"{new_name} download failed")
+
+                refreshed_status = engine_model_status(engine_name)
+                if not refreshed_status.get("downloaded", False):
+                    raise RuntimeError(f"{new_name} download did not finish cleanly")
+
+            # Loading/warming is not cancellable inside the MLX wrappers, so
+            # cancellation is available only during the network snapshot pull.
             if old_transcriber is not None:
                 _status(f"Unloading {old_name}...")
                 try:
                     old_transcriber.close()
+                    old_unloaded = True
                 except Exception as e:
                     log(f"Unload warning: {e}", "WARN")
 
-            # Phase 2 + 3: engine.start() downloads if needed then warms up.
-            # HF doesn't expose a clean "download done" hook, so we label the
-            # whole phase "downloading" when the cache is empty (the progress
-            # bar itself is authoritative via disk polling) and "warming" when
-            # the cache is already populated and only the MLX graph compile
-            # remains. The menu bar status line still narrates both steps.
             if needs_download:
-                _status(f"Downloading {new_name} model...")
+                _status(f"Loading {new_name}...")
                 if watcher is not None:
-                    watcher.set_phase("downloading")
+                    watcher.set_phase("warming")
             else:
                 _status(f"Loading {new_name}...")
                 if watcher is not None:
@@ -152,17 +264,20 @@ class SwitchingMixin:
             if watcher is not None:
                 watcher.finish(error=friendly)
                 watcher = None
-            self._send_state_error(friendly)
+            _status(friendly)
 
-            # Rollback: the old engine was unloaded — bring it back so the user
-            # isn't left with no working transcriber.
-            try:
-                restored = Transcriber(engine_id=self.config.transcription.engine)
-                if restored.start():
-                    self.transcriber = restored
-                    log("Rollback: previous engine restored", "OK")
-            except Exception as restore_err:
-                log(f"Rollback failed: {restore_err}", "ERR")
+            if old_unloaded:
+                # Rollback: the old engine was unloaded — bring it back so the
+                # user isn't left with no working transcriber.
+                try:
+                    restored = Transcriber(engine_id=self.config.transcription.engine)
+                    if restored.start():
+                        self.transcriber = restored
+                        log("Rollback: previous engine restored", "OK")
+                except Exception as restore_err:
+                    log(f"Rollback failed: {restore_err}", "ERR")
+            else:
+                self.transcriber = old_transcriber
 
             self._send_engines_status()
 
@@ -172,6 +287,12 @@ class SwitchingMixin:
                     self._current_status = "Ready"
                     self._send_state_update("idle", status_text="Ready")
             threading.Thread(target=_reset, daemon=True).start()
+        finally:
+            if needs_download and cache_dir and hf_repo:
+                self._clear_download_cancel(engine_name, cancel_event)
+            with self._state_lock:
+                self._settings_operation_active = False
+                self._busy = False
 
     def _remove_engine_cache(self, engine_name: str):
         """Delete on-disk weights for an engine. Refuses to wipe the active one."""
@@ -348,14 +469,24 @@ class SwitchingMixin:
             return
         model_id = self.config.kokoro_tts.model
         cache_path = kokoro_cache_path(model_id)
-        downloaded = cache_path.is_dir() and any(cache_path.iterdir())
-        total = expected_size_bytes(model_id) if not downloaded else 0
+        downloaded = hf_cache_complete(cache_path, ("config.json", "kokoro-v1_0.safetensors"))
         watcher = DownloadWatcher(
-            "kokoro_tts", cache_path, total, self.ipc.send
+            "kokoro_tts", cache_path, 0, self.ipc.send
         )
         watcher.start()
+        cancel_event = threading.Event()
+        if not downloaded:
+            self._register_download_cancel("kokoro_tts", cancel_event)
         try:
             watcher.set_phase("downloading" if not downloaded else "warming")
+            if not downloaded:
+                ok, err = self._prefetch_hf_snapshot("kokoro_tts", model_id, cancel_event)
+                if cancel_event.is_set():
+                    watcher.finish(error="Kokoro download canceled", phase="canceled")
+                    return
+                if not ok:
+                    watcher.finish(error=_friendly_download_error(err, "Kokoro"))
+                    return
             provider = processor.get_provider()
             if provider is None:
                 watcher.finish(error="Kokoro provider unavailable")
@@ -374,6 +505,9 @@ class SwitchingMixin:
             friendly = _friendly_download_error(str(e), "Kokoro")
             log(f"Kokoro preload failed: {e}", "ERR")
             watcher.finish(error=friendly)
+        finally:
+            if not downloaded:
+                self._clear_download_cancel("kokoro_tts", cancel_event)
 
     def _disable_tts(self):
         """Tear down the TTS processor and unbind its shortcut."""

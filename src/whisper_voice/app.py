@@ -90,6 +90,7 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
         self.audio_processor = AudioProcessor(self.config)
 
         self._busy = False
+        self._settings_operation_active = False
         self._ready = False
         self._grammar_ready = False
         self._grammar_last_check: float = 0.0
@@ -118,6 +119,8 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
         self._models_loaded: bool = True
 
         self._monitor_heartbeat_timer: Optional[threading.Timer] = None
+        self._download_cancel_lock = threading.Lock()
+        self._download_cancel_events: dict[str, threading.Event] = {}
 
         self.ipc = IPCServer()
         self.ipc.set_on_connect(self._on_swift_connect)

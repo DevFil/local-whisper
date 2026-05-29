@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 struct VocabularyPanel: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var searchText: String = ""
     @State private var newSpoken: String = ""
@@ -96,7 +97,7 @@ struct VocabularyPanel: View {
                             removeRule(rule.key)
                         } label: {
                             Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(Theme.Tone.danger.color)
+                                .foregroundStyle(Theme.Tone.danger.color(for: colorScheme))
                                 .symbolRenderingMode(.hierarchical)
                         }
                         .buttonStyle(.plain)

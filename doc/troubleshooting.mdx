@@ -66,7 +66,7 @@ Loading a model is not enough. The local server must be running.
 
 Fresh setup downloads and warms the active engine. Later runs load cached models from disk.
 
-Qwen3-ASR downloads when you switch to it. WhisperKit manages its own model folder. Kokoro downloads only after text-to-speech is enabled.
+Qwen3-ASR downloads when you switch to it. WhisperKit manages its own model folder. Kokoro downloads only after text-to-speech is enabled. Settings marks a managed MLX model as downloaded only after a complete Hugging Face snapshot is present. Partial caches show as partial and can be resumed from the Transcription panel.
 
 If idle model unload is enabled, Local Whisper may release the active model from RAM while the background service stays ready. The next transcription reloads the model on demand. `wh setup`, `wh update`, and `wh restart` treat the service as ready once the command socket is accepting commands, even if the model is currently unloaded.
 
@@ -74,7 +74,7 @@ Model preparation in setup/update is bounded. If a local model check takes too l
 
 ## Empty transcription
 
-Check microphone permission, input-device selection, and speech level. If the first recording after sleep, wake, or long idle is empty, try once more. Local Whisper resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.
+Check microphone permission, input-device selection, and speech level. If macOS routes input to a virtual device such as BlackHole, select a real microphone in System Settings -> Sound -> Input. If macOS did not show a prompt during setup, use Settings -> Advanced -> Permissions to request Microphone and Accessibility again. If the first recording after sleep, wake, or long idle is empty, try once more. Local Whisper backs off, refreshes the CoreAudio device list, and resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.
 
 ## Overlay is not visible
 

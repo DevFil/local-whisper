@@ -60,13 +60,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
 struct LocalWhisperUIApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     private var appState: AppState { sharedAppState }
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()
                 .environment(appState)
-                .tint(Theme.Brand.accent)
+                .tint(Theme.Brand.accent(for: colorScheme))
         } label: {
             Image(systemName: appState.menuBarIconName)
                 .modifier(MenuBarBounce(value: appState.phase, reduceMotion: reduceMotion))
@@ -76,7 +77,7 @@ struct LocalWhisperUIApp: App {
         Settings {
             SettingsView()
                 .environment(appState)
-                .tint(Theme.Brand.accent)
+                .tint(Theme.Brand.accent(for: colorScheme))
         }
         .defaultSize(width: 880, height: 640)
         .windowResizability(.contentMinSize)

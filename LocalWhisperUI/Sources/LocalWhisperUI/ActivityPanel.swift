@@ -5,6 +5,7 @@ import Charts
 
 struct ActivityPanel: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var snapshot: ActivitySnapshot = .empty
     @State private var loading = false
 
@@ -40,7 +41,7 @@ struct ActivityPanel: View {
                 statCard(title: "Sessions", value: "\(snapshot.totalSessions)", icon: "waveform", tint: .red, footnote: snapshot.firstSessionFootnote)
                 statCard(title: "Words", value: snapshot.totalWords.formatted(.number), icon: "textformat", tint: .blue, footnote: snapshot.wordsPerSessionFootnote)
                 statCard(title: "Today", value: "\(snapshot.todaySessions)", icon: "sun.max.fill", tint: .orange, footnote: "\(snapshot.todayWords.formatted(.number)) words")
-                statCard(title: "Last 7 days", value: "\(snapshot.weekSessions)", icon: "calendar", tint: .green, footnote: "\(snapshot.weekWords.formatted(.number)) words")
+                statCard(title: "Last 7 days", value: "\(snapshot.weekSessions)", icon: "calendar", tint: Theme.Tone.success.color(for: colorScheme), footnote: "\(snapshot.weekWords.formatted(.number)) words")
             }
         }
     }

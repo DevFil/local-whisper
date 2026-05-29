@@ -80,7 +80,7 @@ cd local-whisper
 ./setup.sh
 ```
 
-The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. Other engines download when you switch to them. Kokoro downloads when text-to-speech is enabled.
+The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. Other engines download inline in Settings when you switch to them, with progress, cache verification, and cancel. Kokoro downloads when text-to-speech is enabled.
 
 ### Service Controls
 
@@ -152,7 +152,7 @@ Results go to clipboard. Text-transform shortcuts require grammar correction to 
 
 ## Transcription Engines
 
-Switch via Settings, `wh engine <name>`, or config.
+Switch via Settings, `wh engine <name>`, or config. Settings shows whether each managed MLX model is downloaded, partial, or missing. Downloads stay inside the Transcription panel with progress and a cancel button; the dictation overlay is reserved for recording, transcription, speech, and result states.
 
 ### Parakeet-TDT v3 (default)
 
@@ -378,7 +378,7 @@ Sidebar layout with focused panels:
 | Output | Overlay, sounds, notifications, paste-at-cursor, history limit |
 | Shortcuts | Proofread / rewrite / prompt-engineer keybindings, full cheatsheet |
 | Activity | Sessions, words, 30-day chart, top words, top replacement triggers |
-| Advanced | Storage paths, model idle unload, service log, doctor, restart, update |
+| Advanced | Permissions, storage paths, model idle unload, service log, doctor, restart, update |
 | About | Version, credits, replay tutorial |
 
 Settings save to `~/.whisper/config.toml`. Restart-required fields warn and offer immediate restart.
@@ -551,7 +551,7 @@ Loading a model does **not** start the server.
 <details>
 <summary><strong>Slow first transcription</strong></summary>
 
-`setup.sh` downloads and warms the active transcription engine. Fresh installs use Parakeet by default. Qwen3-ASR downloads when you switch to it, WhisperKit manages its own models, and Kokoro downloads only after text-to-speech is enabled. After a model is cached, later runs load it from disk.
+`setup.sh` downloads and warms the active transcription engine. Fresh installs use Parakeet by default. Qwen3-ASR downloads when you switch to it, WhisperKit manages its own models, and Kokoro downloads only after text-to-speech is enabled. Settings verifies complete Hugging Face snapshots before marking a model downloaded; partial caches show as resumable instead of ready. After a model is cached, later runs load it from disk.
 
 If idle model unload is enabled, Local Whisper can release the model from RAM while the service stays ready. The next transcription reloads the model on demand. Setup, update, and restart checks wait for the service command socket, not for the model to remain resident in memory.
 
@@ -561,9 +561,9 @@ If idle model unload is enabled, Local Whisper can release the model from RAM wh
 <summary><strong>Empty transcription</strong></summary>
 
 - Speak clearly, close to the microphone
-- Check microphone permissions in System Settings
-- Confirm the correct input device is selected
-- If the first recording after sleep, wake, or a long idle period is empty, try once more. Local Whisper now resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.
+- Check microphone permissions in System Settings or use Settings -> Advanced -> Permissions to request them again
+- Confirm the correct input device is selected. If macOS routes input to a virtual device such as BlackHole, select a real microphone in System Settings -> Sound -> Input.
+- If the first recording after sleep, wake, or a long idle period is empty, try once more. Local Whisper backs off, refreshes the CoreAudio device list, and resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.
 
 </details>
 

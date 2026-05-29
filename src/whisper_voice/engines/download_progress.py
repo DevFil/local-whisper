@@ -7,15 +7,15 @@ Streams `download_progress` IPC messages so Settings panels can render inline
 progress bars during engine/TTS downloads instead of a modal "loading"
 dialogue. Works by:
 
-  1. Preflighting the repo's total size via `HfApi.model_info(files_metadata=True)`
-     (one call per repo, cached for the service lifetime).
-  2. Polling the on-disk cache directory every 500 ms and emitting
+  1. Polling the on-disk cache directory every 500 ms and emitting
      bytes / total / percent / phase so the UI can animate a definite bar.
 
 Polling vs hooking tqdm keeps the integration surface small: the various
 `*-mlx` wrappers (parakeet-mlx, qwen3-asr-mlx, kokoro-mlx) all funnel through
 `huggingface_hub.snapshot_download` into the same cache layout, so we only need
-to watch the blobs directory regardless of which engine is loading.
+to watch the blobs directory regardless of which engine is loading. The total
+byte count is optional; Settings can still show an active indeterminate bar
+with aggregate downloaded bytes when a size preflight is unavailable or skipped.
 """
 
 import threading
@@ -71,10 +71,11 @@ class DownloadWatcher:
       watcher.finish()                # emits 'ready' and joins
       # or
       watcher.finish(error="...")     # emits 'error' and joins
+      watcher.finish(error="...", phase="canceled")
 
-    Size is reported as delta above a baseline captured at construction time,
-    so re-entering an engine that's already partially cached reads bytes added
-    during *this* run, not the aggregate cache size.
+    Size is reported as aggregate cache bytes. That lets a resumed partial
+    download show real progress instead of sitting at zero because the partial
+    files existed before this watcher started.
     """
 
     def __init__(
@@ -89,7 +90,6 @@ class DownloadWatcher:
         self._total = int(total_bytes) if total_bytes else 0
         self._ipc_send = ipc_send
         self._phase = "preparing"
-        self._baseline = _safe_size(cache_path)
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
@@ -106,8 +106,10 @@ class DownloadWatcher:
         self._phase = phase
         self._emit()
 
-    def finish(self, error: Optional[str] = None) -> None:
-        if error is not None:
+    def finish(self, error: Optional[str] = None, phase: Optional[str] = None) -> None:
+        if phase is not None:
+            self._phase = phase
+        elif error is not None:
             self._phase = "error"
         else:
             self._phase = "ready"
@@ -118,7 +120,7 @@ class DownloadWatcher:
         self._emit(error=error)
 
     def _emit(self, error: Optional[str] = None) -> None:
-        bytes_now = max(0, _safe_size(self._cache_path) - self._baseline)
+        bytes_now = _safe_size(self._cache_path)
         if self._total > 0:
             percent = min(1.0, bytes_now / self._total)
         else:

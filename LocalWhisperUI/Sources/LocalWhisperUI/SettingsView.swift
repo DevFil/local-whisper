@@ -126,20 +126,23 @@ struct SettingsView: View {
 // MARK: - Sidebar chrome
 
 private struct SettingsSidebarHeader: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
+        let accent = Theme.Brand.accent(for: colorScheme)
         HStack(spacing: Theme.Spacing.m) {
             ZStack {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .fill(Theme.Brand.accent.opacity(0.16))
+                    .fill(accent.opacity(colorScheme == .dark ? 0.16 : 0.12))
                 Image(systemName: "waveform")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.Brand.accent)
+                    .foregroundStyle(accent)
                     .symbolRenderingMode(.hierarchical)
             }
             .frame(width: 40, height: 40)
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .strokeBorder(Theme.Brand.accent.opacity(0.20), lineWidth: 1)
+                    .strokeBorder(accent.opacity(colorScheme == .dark ? 0.20 : 0.28), lineWidth: 1)
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -159,14 +162,16 @@ private struct SettingsSidebarRow: View {
     let section: SettingsSection
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let tint = section.accent.color(for: colorScheme)
         Button(action: action) {
             HStack(spacing: Theme.Spacing.m) {
                 Image(systemName: section.symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isSelected ? section.tint : .secondary)
+                    .foregroundStyle(isSelected ? tint : .secondary)
                     .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -187,10 +192,10 @@ private struct SettingsSidebarRow: View {
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                        .fill(section.tint.opacity(0.16))
+                        .fill(tint.opacity(colorScheme == .dark ? 0.16 : 0.12))
                         .overlay(
                             RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                                .strokeBorder(section.tint.opacity(0.20), lineWidth: 1)
+                                .strokeBorder(tint.opacity(colorScheme == .dark ? 0.20 : 0.26), lineWidth: 1)
                         )
                 }
             }
@@ -201,10 +206,12 @@ private struct SettingsSidebarRow: View {
 
 private struct SettingsDetailHeader: View {
     let section: SettingsSection
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let tint = section.accent.color(for: colorScheme)
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
-            SectionIcon(symbol: section.symbol, tint: section.tint, diameter: 34, fontSize: 15)
+            SectionIcon(symbol: section.symbol, tint: tint, diameter: 34, fontSize: 15)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(section.title)

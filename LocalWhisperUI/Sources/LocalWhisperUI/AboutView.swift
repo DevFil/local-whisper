@@ -84,7 +84,7 @@ struct AboutView: View {
             } label: {
                 Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.large)
 
             Button {

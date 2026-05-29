@@ -32,7 +32,7 @@ class IPCMixin:
         if phase is None:
             if self.recorder.recording:
                 phase = "recording"
-            elif self._busy:
+            elif self._busy and not getattr(self, "_settings_operation_active", False):
                 phase = "processing"
             else:
                 phase = "idle"
@@ -233,6 +233,13 @@ class IPCMixin:
                 threading.Thread(target=self._update_service, daemon=True).start()
             elif action == "resync_audio":
                 threading.Thread(target=self._resync_audio, daemon=True).start()
+            elif action == "cancel_download":
+                target = msg.get("id", "")
+                threading.Thread(target=self._cancel_download, args=(target,), daemon=True).start()
+            elif action == "request_microphone_permission":
+                threading.Thread(target=self._request_microphone_permission, daemon=True).start()
+            elif action == "request_accessibility_permission":
+                threading.Thread(target=self._request_accessibility_permission, daemon=True).start()
         elif msg_type == "engine_switch":
             engine = msg.get("engine", "")
             threading.Thread(target=self._switch_engine, args=(engine,), daemon=True).start()
@@ -289,3 +296,25 @@ class IPCMixin:
                 remove_replacement(spoken)
                 self.config = get_config()
                 self._send_config_snapshot()
+
+    def _request_microphone_permission(self):
+        from .utils import request_microphone_permission
+
+        ok, msg = request_microphone_permission()
+        status = "Microphone access granted" if ok else msg
+        self._current_status = status
+        self._send_state_update("idle", status_text=status)
+
+    def _request_accessibility_permission(self):
+        from .utils import check_accessibility_trusted, request_accessibility_permission
+
+        trusted = check_accessibility_trusted()
+        if not trusted:
+            trusted = request_accessibility_permission(force=True)
+        status = (
+            "Accessibility access granted"
+            if trusted
+            else "Accessibility permission requested"
+        )
+        self._current_status = status
+        self._send_state_update("idle", status_text=status)

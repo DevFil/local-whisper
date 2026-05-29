@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var step: Step = .welcome
 
@@ -123,23 +124,27 @@ struct OnboardingView: View {
                 icon: "mic.fill",
                 tint: .red,
                 title: "Microphone",
-                description: "To capture your voice. Granted in System Settings → Privacy & Security → Microphone.",
-                buttonTitle: "Open Microphone Settings",
-                anchor: "Privacy_Microphone"
+                description: "To capture your voice. If macOS has not asked yet, this sends the permission request now.",
+                buttonTitle: "Request Microphone Access",
+                action: {
+                    appState.ipcClient?.sendAction("request_microphone_permission")
+                }
             )
 
             permissionCard(
                 icon: "keyboard.fill",
                 tint: .blue,
                 title: "Accessibility",
-                description: "To detect the global hotkey and read selected text. Granted to the wh helper in System Settings → Privacy & Security → Accessibility.",
-                buttonTitle: "Open Accessibility Settings",
-                anchor: "Privacy_Accessibility"
+                description: "To detect the global hotkey and read selected text. This sends the Accessibility request for the wh helper.",
+                buttonTitle: "Request Accessibility Access",
+                action: {
+                    appState.ipcClient?.sendAction("request_accessibility_permission")
+                }
             )
 
             InlineNotice(
                 kind: .info,
-                text: "Both prompts also appear automatically the first time the service runs. You can grant later from Settings → Advanced."
+                text: "If a permission was previously denied, macOS opens the matching System Settings page instead of showing the prompt again."
             )
         }
         .padding(.horizontal, Theme.Spacing.xxl)
@@ -168,7 +173,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l - 2) {
             HStack(alignment: .center, spacing: Theme.Spacing.l - 2) {
-                SectionIcon(symbol: "checkmark.seal.fill", tint: .green, diameter: 56, fontSize: 28)
+                SectionIcon(symbol: "checkmark.seal.fill", tint: Theme.Tone.success.color(for: colorScheme), diameter: 56, fontSize: 28)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Setup complete")
                         .font(Theme.Typography.headline)
@@ -265,7 +270,7 @@ struct OnboardingView: View {
         }
     }
 
-    private func permissionCard(icon: String, tint: Color, title: String, description: String, buttonTitle: String, anchor: String) -> some View {
+    private func permissionCard(icon: String, tint: Color, title: String, description: String, buttonTitle: String, action: @escaping () -> Void) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             SectionIcon(symbol: icon, tint: tint, diameter: 36, fontSize: 16)
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -275,9 +280,7 @@ struct OnboardingView: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(buttonTitle) {
-                    openPrefPane(anchor)
-                }
+                Button(buttonTitle, action: action)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .padding(.top, Theme.Spacing.xs)
@@ -334,11 +337,6 @@ struct OnboardingView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(isCurrent ? "Currently selected" : "Tap to select \(title)")
-    }
-
-    private func openPrefPane(_ anchor: String) {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
-        NSWorkspace.shared.open(url)
     }
 
     private func finish() {

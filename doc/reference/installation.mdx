@@ -49,6 +49,8 @@ wh setup
 
 `wh setup` finishes the app setup: config, default model, macOS permissions, and the background service.
 
+Other managed MLX speech models download when selected in Settings -> Transcription. The model card shows downloaded, partial, or missing cache state, streams download progress inline, and lets you cancel before the current engine is unloaded.
+
 ## macOS permissions
 
 Local Whisper needs two permissions:
@@ -59,6 +61,8 @@ Local Whisper needs two permissions:
 | Accessibility | Lets the global hotkey work from any app and paste text back where you were typing. |
 
 macOS may list the app as **Python** in permission screens. That is expected because the background service runs through Local Whisper's packaged Python runtime.
+
+The onboarding window and Settings -> Advanced -> Permissions both send the macOS permission request. If a permission was previously denied and macOS will not show the dialog again, Local Whisper opens the matching System Settings page.
 
 If setup finishes with permissions pending, open:
 

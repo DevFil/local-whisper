@@ -33,6 +33,7 @@ class Recorder:
         self._input_warmup_timeout = 0.45
         self._input_live_threshold = 1e-9
         self._start_retries = 2
+        self._last_error_message: str | None = None
 
         config = get_config()
         buf_size = int(config.audio.sample_rate * config.audio.pre_buffer) if config.audio.pre_buffer > 0 else 0
@@ -56,6 +57,29 @@ class Recorder:
     def rms_level(self) -> float:
         """Current audio RMS level (0.0-1.0), updated each callback."""
         return self._current_rms
+
+    @property
+    def last_error_message(self) -> str | None:
+        """Most recent start failure, formatted for user-facing surfaces."""
+        return self._last_error_message
+
+    def no_signal_error_message(self) -> str:
+        """Explain all-zero input using the current macOS input device."""
+        device_name = self._current_input_device_name()
+        if device_name:
+            if self._looks_virtual_input(device_name):
+                return (
+                    f"No live microphone signal from {device_name}. "
+                    "Select a real input device in System Settings > Sound > Input."
+                )
+            return (
+                f"No microphone signal from {device_name}. "
+                "Check System Settings > Sound > Input and microphone permission."
+            )
+        return (
+            "No microphone signal. Check System Settings > Sound > Input "
+            "and microphone permission."
+        )
 
     def start_monitoring(self):
         """Start the pre-recording monitor. Rebuilds a dead stream silently."""
@@ -143,6 +167,7 @@ class Recorder:
         with self._state_lock:
             if self._recording.is_set():
                 return False
+            self._last_error_message = None
             self.stop_monitoring()
             with self._chunks_lock:
                 if config.audio.pre_buffer > 0 and len(self._pre_buffer) > 0:
@@ -175,7 +200,7 @@ class Recorder:
                         self._start_time = time.time()
                         return True
 
-                    last_error = RuntimeError("microphone returned all-zero audio")
+                    last_error = RuntimeError(self.no_signal_error_message())
                     log("Mic returned silence during warm-up; resetting audio input", "WARN")
                 except Exception as e:
                     last_error = e
@@ -188,13 +213,53 @@ class Recorder:
                     self._chunks = []
                 if attempt < self._start_retries:
                     self.reset_audio_host(close_stream=False)
-                    time.sleep(0.15)
+                    time.sleep(0.5 * attempt)
 
             if last_error is None:
                 last_error = RuntimeError("microphone did not become ready")
-            log(f"Mic error: {last_error}", "ERR")
+            self._last_error_message = str(last_error)
+            log(f"Mic error: {self._last_error_message}", "ERR")
             self._recording.clear()
             return False
+
+    def _current_input_device_name(self) -> str | None:
+        """Return the current default input device name when PortAudio can report it."""
+        try:
+            default_device = getattr(getattr(sd, "default", None), "device", None)
+            input_index = None
+            if isinstance(default_device, (list, tuple)) and default_device:
+                input_index = default_device[0]
+            elif isinstance(default_device, (int, np.integer)):
+                input_index = int(default_device)
+
+            info = None
+            if isinstance(input_index, int) and input_index >= 0:
+                info = sd.query_devices(input_index)
+            else:
+                try:
+                    info = sd.query_devices(kind="input")
+                except TypeError:
+                    info = None
+
+            if isinstance(info, dict):
+                name = str(info.get("name", "")).strip()
+                return name or None
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _looks_virtual_input(device_name: str) -> bool:
+        lowered = device_name.lower()
+        markers = (
+            "blackhole",
+            "soundflower",
+            "loopback",
+            "background music",
+            "obs",
+            "zoom",
+        )
+        return any(marker in lowered for marker in markers)
 
     def stop(self) -> np.ndarray:
         """Stop recording and return audio data."""
@@ -224,6 +289,12 @@ class Recorder:
                 initialize()
         except Exception as e:
             log(f"Audio input reset warning: {e}", "WARN")
+        try:
+            query_devices = getattr(sd, "query_devices", None) or getattr(sd, "queryDevices", None)
+            if callable(query_devices):
+                query_devices()
+        except Exception:
+            pass
 
     def _reset_input_health(self):
         self._input_ready.clear()

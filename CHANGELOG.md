@@ -4,6 +4,22 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.11] - 2026-05-29
+
+### Added
+
+- Added inline Settings download progress and cancellation for managed MLX models and Kokoro preload without opening the dictation overlay.
+- Added Settings and onboarding actions that request Microphone and Accessibility permissions directly, with System Settings fallback when macOS cannot show the prompt again.
+
+### Fixed
+
+- Fixed model cache truth in Settings so partial Hugging Face snapshots are shown as partial/resumable instead of downloaded.
+- Fixed Settings model switching so failed or canceled downloads keep the current working engine loaded.
+- Fixed stale macOS input recovery by adding retry backoff and a CoreAudio device-list refresh after PortAudio reset.
+- Fixed microphone permission checks by shipping AVFoundation support instead of treating a missing permission framework as success.
+- Fixed all-zero microphone failures to name the current input device, including virtual inputs such as BlackHole, instead of surfacing a generic model or mic error.
+- Improved Settings light-mode contrast and removed selected-looking styling from external About links.
+
 ## [1.6.10] - 2026-05-27
 
 ### Fixed

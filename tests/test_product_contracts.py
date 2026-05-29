@@ -199,5 +199,6 @@ def test_pydantic_core_pin_matches_pydantic_runtime_requirement():
     pyproject = tomllib.loads(_read("pyproject.toml"))
     dependencies = set(pyproject["project"]["dependencies"])
 
+    assert "pyobjc-framework-AVFoundation>=12.1" in dependencies
     assert "pydantic==2.12.5" in dependencies
     assert "pydantic-core==2.41.5" in dependencies
