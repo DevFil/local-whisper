@@ -36,6 +36,28 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      - name: Upgrade sherpa_onnx packages
+        run: flutter pub upgrade sherpa_onnx sherpa_onnx_ios
+
+      - name: Resolve Swift package dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -workspace ios/Runner.xcworkspace \
+              -scheme Runner \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/swift-packages"; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Failed to resolve Swift packages after ${attempt} attempts."
+              exit 1
+            fi
+
+            echo "::warning::Swift package resolution failed (attempt ${attempt}); retrying..."
+            sleep 15
+          done
+
       - name: Build unsigned iPhone IPA
         run: flutter build ipa --release --no-codesign
 
