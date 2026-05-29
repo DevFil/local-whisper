@@ -37,7 +37,7 @@ jobs:
         run: flutter pub get
 
       - name: Build unsigned iPhone IPA
-        run: flutter build ipa --release --target-platform=ios-arm64 --no-codesign
+        run: flutter build ipa --release --no-codesign
 
       - name: Verify IPA output
         run: |
